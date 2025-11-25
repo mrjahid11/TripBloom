@@ -1,8 +1,10 @@
 
-import mongoose from 'mongoose';
-// MongoDB connection
 
-const mongoUri = 'mongodb+srv://mdjahidulhasan1_db_user:Tripbloom1234@cluster0.ouemec1.mongodb.net/?appName=Cluster0';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+dotenv.config();
+// MongoDB connection
+const mongoUri = process.env.MONGO_URI;
 mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -15,7 +17,6 @@ mongoose.connect(mongoUri, {
 
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { ROLES, User } from './model/user.model.js';
 
 // Remove username index if it exists (for migration from old schema)
