@@ -1,0 +1,294 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { 
+  FaChevronLeft, FaChevronRight, FaCalendarAlt, FaCircle,
+  FaMapMarkerAlt, FaUsers, FaClock, FaPlus
+} from 'react-icons/fa';
+
+const GroupDeparturesCalendar = ({ onCreateDeparture }) => {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [departures, setDepartures] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [hoveredDay, setHoveredDay] = useState(null);
+  const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    fetchDepartures();
+  }, [currentDate]);
+
+  const fetchDepartures = async () => {
+    setLoading(true);
+    try {
+      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+      
+      const res = await axios.get('/api/admin/group-departures', {
+        params: {
+          startDate: startOfMonth.toISOString(),
+          endDate: endOfMonth.toISOString()
+        }
+      });
+      setDepartures(res.data.departures || []);
+    } catch (err) {
+      console.error('Failed to fetch departures:', err);
+    }
+    setLoading(false);
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      OPEN: 'bg-green-500',
+      FULL: 'bg-orange-500',
+      CANCELLED: 'bg-red-500',
+      CLOSED: 'bg-gray-500'
+    };
+    return colors[status] || 'bg-blue-500';
+  };
+
+  const getDeparturesForDay = (day) => {
+    const dateStr = new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toISOString().split('T')[0];
+    return departures.filter(dep => {
+      const depDate = new Date(dep.startDate).toISOString().split('T')[0];
+      return depDate === dateStr;
+    });
+  };
+
+  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+  const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+
+  const prevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
+  };
+
+  const handleDayHover = (day, event) => {
+    const dayDepartures = getDeparturesForDay(day);
+    if (dayDepartures.length > 0) {
+      setHoveredDay(day);
+      setHoverPosition({ x: event.clientX, y: event.clientY });
+    }
+  };
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+
+  return (
+    <div className="bg-gradient-to-br from-gray-800 to-gray-900 dark:from-gray-800 dark:to-gray-900 rounded-2xl shadow-2xl p-4 border border-gray-700 dark:border-gray-700">
+      {/* Compact Header with Navigation */}
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="text-2xl font-bold text-white dark:text-white flex items-center">
+            <FaCalendarAlt className="mr-2 text-blue-400 dark:text-blue-400" />
+            Departures Calendar
+          </h2>
+        </div>
+        
+        <div className="flex items-center space-x-3">
+          {/* Create Button */}
+          <button
+            onClick={() => onCreateDeparture && onCreateDeparture()}
+            className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:shadow-lg transform hover:scale-105 transition-all font-semibold"
+          >
+            <FaPlus />
+            <span>Create Departure</span>
+          </button>
+          
+          {/* Compact Month Navigation */}
+          <div className="flex items-center bg-gray-700 dark:bg-gray-700 rounded-lg shadow-md border border-gray-600 dark:border-gray-600 px-1 py-1">
+            <button
+              onClick={prevMonth}
+              className="p-2 hover:bg-blue-900/20 dark:hover:bg-blue-900/20 rounded-md transition-all"
+              title="Previous Month"
+            >
+              <FaChevronLeft className="text-blue-400 dark:text-blue-400" />
+            </button>
+            <span className="text-lg font-bold text-white dark:text-white px-4">
+              {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+            </span>
+            <button
+              onClick={nextMonth}
+              className="p-2 hover:bg-blue-900/20 dark:hover:bg-blue-900/20 rounded-md transition-all"
+              title="Next Month"
+            >
+              <FaChevronRight className="text-blue-400 dark:text-blue-400" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Compact Legend */}
+      <div className="flex items-center justify-between bg-gray-700 dark:bg-gray-700 rounded-lg px-3 py-2 shadow-sm border border-gray-600 dark:border-gray-600 mb-3">
+        <div className="flex flex-wrap gap-3">
+          <div className="flex items-center space-x-1">
+            <FaCircle className="text-green-500 text-[8px]" />
+            <span className="text-xs font-medium text-gray-300 dark:text-gray-300">Open</span>
+          </div>
+          <div className="flex items-center space-x-1">
+            <FaCircle className="text-orange-500 text-[8px]" />
+            <span className="text-xs font-medium text-gray-300 dark:text-gray-300">Full</span>
+          </div>
+          <div className="flex items-center space-x-1">
+            <FaCircle className="text-red-500 text-[8px]" />
+            <span className="text-xs font-medium text-gray-300 dark:text-gray-300">Cancelled</span>
+          </div>
+          <div className="flex items-center space-x-1">
+            <FaCircle className="text-gray-500 text-[8px]" />
+            <span className="text-xs font-medium text-gray-300 dark:text-gray-300">Closed</span>
+          </div>
+        </div>
+        <div className="text-xs text-gray-400 dark:text-gray-400 flex items-center">
+          <FaClock className="mr-1 text-[10px]" />
+          {departures.length} departures
+        </div>
+      </div>
+
+      {/* Compact Calendar Grid */}
+      <div className="bg-gray-800 dark:bg-gray-800 rounded-lg shadow-md border border-gray-700 dark:border-gray-700 overflow-hidden">
+        <div className="grid grid-cols-7 gap-0 border-b border-gray-700 dark:border-gray-700">
+          {/* Compact Day headers */}
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+            <div 
+              key={day} 
+              className="text-center text-xs font-bold text-gray-300 dark:text-gray-300 py-2 bg-gradient-to-b from-gray-700 to-gray-800 dark:from-gray-700 dark:to-gray-800 border-r border-gray-700 dark:border-gray-700 last:border-r-0"
+            >
+              {day}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-0">
+          {/* Empty cells for days before month starts */}
+          {[...Array(firstDayOfMonth)].map((_, i) => (
+            <div 
+              key={`empty-${i}`} 
+              className="h-16 bg-gray-900/30 dark:bg-gray-900/30 border-r border-b border-gray-700 dark:border-gray-700"
+            ></div>
+          ))}
+
+          {/* Compact Calendar days */}
+          {[...Array(daysInMonth)].map((_, i) => {
+            const day = i + 1;
+            const dayDepartures = getDeparturesForDay(day);
+            const today = new Date();
+            const isToday = today.getDate() === day && 
+                           today.getMonth() === currentDate.getMonth() && 
+                           today.getFullYear() === currentDate.getFullYear();
+
+            return (
+              <div
+                key={day}
+                onMouseEnter={(e) => handleDayHover(day, e)}
+                onMouseLeave={() => setHoveredDay(null)}
+                className={`h-16 border-r border-b border-gray-700 dark:border-gray-700 p-1.5 transition-all cursor-pointer relative group ${
+                  isToday 
+                    ? 'bg-gradient-to-br from-blue-900/50 to-blue-800/50 dark:from-blue-900/50 dark:to-blue-800/50' 
+                    : 'bg-gray-800/50 dark:bg-gray-800/50 hover:bg-gray-700/50 dark:hover:bg-gray-700/50'
+                }`}
+              >
+                {/* Compact Day number */}
+                <div className={`text-xs font-bold mb-1 ${
+                  isToday 
+                    ? 'text-blue-400 dark:text-blue-400' 
+                    : 'text-white dark:text-white'
+                }`}>
+                  {day}
+                  {isToday && (
+                    <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse"></div>
+                  )}
+                </div>
+
+                {/* Compact Departure indicators */}
+                {dayDepartures.length > 0 && (
+                  <div className="space-y-0.5">
+                    {dayDepartures.slice(0, 2).map((dep, idx) => (
+                      <div
+                        key={idx}
+                        className={`w-full h-1.5 rounded-sm ${getStatusColor(dep.status)}`}
+                        title={dep.packageId?.name || 'Package'}
+                      ></div>
+                    ))}
+                    {dayDepartures.length > 2 && (
+                      <div className="text-[9px] text-center font-bold bg-gray-700 dark:bg-gray-700 text-gray-300 dark:text-gray-300 rounded-sm py-0.5">
+                        +{dayDepartures.length - 2}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Hover effect border */}
+                <div className="absolute inset-0 border-2 border-blue-500 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Enhanced Hover Popup */}
+      {hoveredDay && getDeparturesForDay(hoveredDay).length > 0 && (
+        <div
+          className="fixed z-50 bg-gray-800 dark:bg-gray-800 rounded-xl shadow-2xl border-2 border-blue-400 dark:border-blue-400 p-4 max-w-md animate-fade-in"
+          style={{ 
+            left: Math.min(hoverPosition.x + 10, window.innerWidth - 400), 
+            top: hoverPosition.y + 10 
+          }}
+        >
+          <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-700 dark:border-gray-700">
+            <div className="font-bold text-lg text-white dark:text-white flex items-center">
+              <FaCalendarAlt className="mr-2 text-blue-400 dark:text-blue-400" />
+              {monthNames[currentDate.getMonth()]} {hoveredDay}, {currentDate.getFullYear()}
+            </div>
+            <div className="text-xs bg-blue-900/30 dark:bg-blue-900/30 text-blue-400 dark:text-blue-400 px-2 py-1 rounded-full font-semibold">
+              {getDeparturesForDay(hoveredDay).length} Departure{getDeparturesForDay(hoveredDay).length !== 1 ? 's' : ''}
+            </div>
+          </div>
+          
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {getDeparturesForDay(hoveredDay).map((dep, idx) => (
+                <div className="bg-gray-700 dark:bg-gray-700 rounded-lg p-3 border border-gray-600 dark:border-gray-600 hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <div className="font-semibold text-white dark:text-white mb-1">
+                      {dep.packageId?.title || 'Package'}
+                    </div>
+                    <div className="flex items-center text-xs text-gray-400 dark:text-gray-400">
+                      <FaMapMarkerAlt className="mr-1" />
+                      {dep.packageId?.destinations?.[0]?.name || 'Destination'}
+                    </div>
+                  </div>
+                  <span className={`px-2 py-1 rounded-lg text-xs font-bold text-white ${getStatusColor(dep.status)}`}>
+                    {dep.status}
+                  </span>
+                </div>
+                
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-600 dark:border-gray-600">
+                  <div className="flex items-center text-xs text-gray-300 dark:text-gray-300">
+                    <FaUsers className="mr-1 text-blue-400 dark:text-blue-400" />
+                    <span className="font-semibold">{dep.bookedSeats}/{dep.totalSeats}</span>
+                    <span className="ml-1">seats</span>
+                  </div>
+                  <div className="w-24 h-2 bg-gray-600 dark:bg-gray-600 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${dep.bookedSeats > dep.totalSeats ? 'bg-red-500' : 'bg-green-500'}`}
+                      style={{ width: `${Math.min((dep.bookedSeats / dep.totalSeats) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {loading && (
+        <div className="absolute inset-0 bg-white/50 dark:bg-gray-800/50 flex items-center justify-center rounded-2xl">
+          <div className="text-primary font-semibold">Loading...</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default GroupDeparturesCalendar;
