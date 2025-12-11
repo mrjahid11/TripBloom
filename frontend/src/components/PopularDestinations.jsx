@@ -1,33 +1,83 @@
 import React, { useState, useEffect } from 'react';
 import { FaClock, FaDollarSign, FaMapMarkerAlt } from 'react-icons/fa';
 import axios from 'axios';
+import PackageDetailModal from './PackageDetailModal';
 
 const PopularDestinations = () => {
   const [destinations, setDestinations] = useState([]);
   const [filter, setFilter] = useState('all');
+  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     fetchDestinations();
   }, []);
 
   const fetchDestinations = async () => {
-    // Using local data for now (backend not ready)
-    setDestinations([
-      { id: 1, name: 'Bali Paradise', duration: '7 Days', price: 1299, image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=500&h=300&fit=crop', type: 'International' },
-      { id: 2, name: 'Cox\'s Bazar Beach', duration: '3 Days', price: 299, image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=500&h=300&fit=crop', type: 'Domestic' },
-      { id: 3, name: 'Maldives Retreat', duration: '5 Days', price: 1899, image: 'https://images.unsplash.com/photo-1514282401047-d79a71a590e8?w=500&h=300&fit=crop', type: 'International' },
-      { id: 4, name: 'Sundarbans Mangrove', duration: '2 Days', price: 199, image: 'https://images.unsplash.com/photo-1511497584788-876760111969?w=500&h=300&fit=crop', type: 'Domestic' },
-      { id: 5, name: 'Potenga Beach', duration: '1 Day', price: 299, image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=500&h=300&fit=crop', type: 'Domestic' },
-      { id: 6, name: 'Paris Romance', duration: '8 Days', price: 2199, image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=500&h=300&fit=crop', type: 'International' },
-    ]);
+    try {
+      const response = await axios.get('http://localhost:3000/api/admin/packages');
+      if (response.data.success && response.data.packages) {
+        // Transform the tour packages data to match the component's expected format
+        const transformedPackages = response.data.packages
+          .filter(pkg => pkg.isActive) // Only show active packages
+          .map(pkg => ({
+            id: pkg._id,
+            name: pkg.title,
+            duration: `${pkg.defaultDays} Days`,
+            price: pkg.basePrice,
+            // Use first destination or fallback
+            image: getDestinationImage(pkg.destinations?.[0]?.country || pkg.destinations?.[0]?.city),
+            type: determinePackageType(pkg),
+            description: pkg.description,
+            destinations: pkg.destinations
+          }));
+        setDestinations(transformedPackages);
+      }
+    } catch (error) {
+      console.error('Error fetching destinations:', error);
+      // Fallback to empty array on error
+      setDestinations([]);
+    }
+  };
+
+  // Helper function to determine package type based on destinations
+  const determinePackageType = (pkg) => {
+    if (!pkg.destinations || pkg.destinations.length === 0) return 'Unknown';
     
-    // Uncomment when backend is ready:
-    // try {
-    //   const response = await axios.get('/api/destinations');
-    //   setDestinations(response.data);
-    // } catch (error) {
-    //   console.error('Error fetching destinations:', error);
-    // }
+    // Check if any destination is international (non-Bangladesh)
+    const hasInternational = pkg.destinations.some(dest => 
+      dest.country && dest.country.toLowerCase() !== 'bangladesh'
+    );
+    
+    return hasInternational ? 'International' : 'Domestic';
+  };
+
+  // Helper function to get appropriate image based on destination
+  const getDestinationImage = (location) => {
+    if (!location) return 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=500&h=300&fit=crop';
+    
+    const locationLower = location.toLowerCase();
+    
+    // Map common destinations to relevant images
+    const imageMap = {
+      'bali': 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=500&h=300&fit=crop',
+      'maldives': 'https://images.unsplash.com/photo-1514282401047-d79a71a590e8?w=500&h=300&fit=crop',
+      'paris': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=500&h=300&fit=crop',
+      'dubai': 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=500&h=300&fit=crop',
+      'thailand': 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=500&h=300&fit=crop',
+      'singapore': 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=500&h=300&fit=crop',
+      'bangladesh': 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=500&h=300&fit=crop',
+      'sundarbans': 'https://images.unsplash.com/photo-1511497584788-876760111969?w=500&h=300&fit=crop',
+      'cox': 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=500&h=300&fit=crop',
+    };
+    
+    // Find matching image or use default
+    for (const [key, image] of Object.entries(imageMap)) {
+      if (locationLower.includes(key)) return image;
+    }
+    
+    // Default travel image
+    return 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=500&h=300&fit=crop';
   };
 
   const filters = ['All', 'Domestic', 'International', 'Day Tours', 'Multi-day'];
@@ -41,6 +91,38 @@ const PopularDestinations = () => {
     if (filter === 'multi-day') return parseInt(destination.duration) > 1;
     return true;
   });
+
+  const handleViewDetails = async (destination) => {
+    try {
+      // Fetch full package details from the backend
+      const response = await axios.get(`http://localhost:3000/api/admin/packages/${destination.id}`);
+      if (response.data.success && response.data.package) {
+        setSelectedPackage(response.data.package);
+        setIsModalOpen(true);
+      }
+    } catch (error) {
+      console.error('Error fetching package details:', error);
+      // Fallback: use the destination data we already have
+      setSelectedPackage({
+        _id: destination.id,
+        title: destination.name,
+        description: destination.description,
+        basePrice: destination.price,
+        defaultDays: parseInt(destination.duration),
+        defaultNights: parseInt(destination.duration) - 1,
+        destinations: destination.destinations,
+        type: destination.type === 'International' ? 'PERSONAL' : 'GROUP',
+        isActive: true,
+        inclusions: {}
+      });
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedPackage(null);
+  };
 
   return (
     <section id="destinations" className="section-container bg-white dark:bg-gradient-to-b dark:from-white dark:to-gray-50 dark:dark:from-gray-900 dark:dark:to-gray-800 border-y border-gray-100 dark:border-gray-800">
@@ -98,11 +180,23 @@ const PopularDestinations = () => {
                   {destination.type}
                 </span>
               </div>
-              <button className="w-full btn-primary">View Details</button>
+              <button 
+                className="w-full btn-primary"
+                onClick={() => handleViewDetails(destination)}
+              >
+                View Details
+              </button>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Package Detail Modal */}
+      <PackageDetailModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        packageData={selectedPackage}
+      />
     </section>
   );
 };
