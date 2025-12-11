@@ -1,4 +1,6 @@
 import { sendMessageController, getMessagesController, getBroadcastMessagesController } from './controller/message.controller.js';
+import { Review } from './model/review.model.js';
+import { TourPackage } from './model/tourPackage.model.js';
 
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
@@ -161,12 +163,74 @@ app.get('/api/packages', (req, res) => {
 });
 
 
-// Reviews (mock data)
-app.get('/api/reviews', (req, res) => {
-    const reviews = [
-      { id: 1, name: 'Sarah Johnson', rating: 5, comment: 'TripBloom made our family trip stress-free and amazing!', avatar: 'avatar1.jpg' },
-      { id: 2, name: 'Mike Chen', rating: 5, comment: 'Best tour booking experience ever. Highly recommended!', avatar: 'avatar2.jpg' },
-      { id: 3, name: 'Emily Rodriguez', rating: 4, comment: 'Great service and wonderful destinations. Will book again!', avatar: 'avatar3.jpg' },
-    ];
+// Reviews endpoints
+app.get('/api/reviews', async (req, res) => {
+  try {
+    const reviews = await Review.find({ status: 'APPROVED' })
+      .populate('customerId', 'fullName email')
+      .populate('packageId', 'title')
+      .sort({ createdAt: -1 })
+      .limit(20);
+    
+    const formattedReviews = reviews.map(review => ({
+      id: review._id,
+      name: review.customerId?.fullName || 'Anonymous',
+      rating: review.rating,
+      comment: review.comment,
+      avatar: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? 'men' : 'women'}/${Math.floor(Math.random() * 99) + 1}.jpg`,
+      packageName: review.packageId?.title,
+      verified: review.verified,
+      createdAt: review.createdAt
+    }));
+    
+    res.json(formattedReviews);
+  } catch (error) {
+    console.error('Error fetching reviews:', error);
+    res.status(500).json({ error: 'Failed to fetch reviews' });
+  }
+});
+
+app.get('/api/reviews/package/:packageId', async (req, res) => {
+  try {
+    const { packageId } = req.params;
+    const reviews = await Review.find({ 
+      packageId, 
+      status: 'APPROVED' 
+    })
+      .populate('customerId', 'fullName')
+      .sort({ createdAt: -1 });
+    
     res.json(reviews);
-  });
+  } catch (error) {
+    console.error('Error fetching package reviews:', error);
+    res.status(500).json({ error: 'Failed to fetch package reviews' });
+  }
+});
+
+// Statistics endpoint for landing page
+app.get('/api/stats', async (req, res) => {
+  try {
+    const [totalPackages, totalUsers, totalReviews] = await Promise.all([
+      TourPackage.countDocuments({ isActive: true }),
+      User.countDocuments({ role: 'CUSTOMER' }),
+      Review.countDocuments({ status: 'APPROVED' })
+    ]);
+    
+    res.json({
+      success: true,
+      stats: {
+        packages: totalPackages,
+        customers: totalUsers,
+        reviews: totalReviews,
+        destinations: 50 // Can be calculated from package destinations
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch statistics',
+      stats: { packages: 0, customers: 0, reviews: 0, destinations: 0 }
+    });
+  }
+});

@@ -25,6 +25,7 @@ const tourPackageSchema = new mongoose.Schema({
       order: Number
     }],
     extras: [String],
+    photos: [{ type: String }], // Array of photo URLs
   assignedOperators: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Operators assigned to this package
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },

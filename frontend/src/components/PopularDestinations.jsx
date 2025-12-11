@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FaClock, FaDollarSign, FaMapMarkerAlt } from 'react-icons/fa';
 import axios from 'axios';
-import PackageDetailModal from './PackageDetailModal';
+import TourDetailModal from './TourDetailModal';
 
 const PopularDestinations = () => {
   const [destinations, setDestinations] = useState([]);
@@ -191,11 +191,12 @@ const PopularDestinations = () => {
         ))}
       </div>
 
-      {/* Package Detail Modal */}
-      <PackageDetailModal
+      {/* Tour Detail Modal */}
+      <TourDetailModal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         packageData={selectedPackage}
+        userRole="CUSTOMER"
       />
     </section>
   );

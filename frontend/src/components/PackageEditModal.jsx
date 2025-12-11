@@ -105,6 +105,8 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
     destinations: [],
     // Extras array
     extras: '',
+    // Photos array
+    photos: [],
     isActive: true
   });
   const [loading, setLoading] = useState(false);
@@ -127,6 +129,7 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
         inclusionsGuide: packageData.inclusions?.guide || false,
         destinations: packageData.destinations || [],
         extras: Array.isArray(packageData.extras) ? packageData.extras.join('\n') : '',
+        photos: packageData.photos || [],
         isActive: packageData.isActive !== undefined ? packageData.isActive : true
       });
     } else {
@@ -145,6 +148,7 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
         inclusionsGuide: false,
         destinations: [],
         extras: '',
+        photos: [],
         isActive: true
       });
     }
@@ -199,6 +203,7 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
         },
         destinations: formData.destinations || [],
         extras: formData.extras.split('\n').filter(e => e.trim()),
+        photos: formData.photos || [],
         isActive: formData.isActive
       };
 
@@ -470,6 +475,75 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
               placeholder="Photo Album&#10;Welcome Drink&#10;Souvenir T-shirt"
             />
+          </div>
+
+          {/* Photos Section */}
+          <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <FaImage className="text-blue-500" />
+                Package Photos (Optional)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setFormData(prev => ({ ...prev, photos: [...prev.photos, ''] }))}
+                className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              >
+                <FaPlus size={12} />
+                <span>Add Photo URL</span>
+              </button>
+            </div>
+
+            {formData.photos.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                No photos added. Click "Add Photo URL" to add images.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {formData.photos.map((photo, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <input
+                        type="url"
+                        value={photo}
+                        onChange={(e) => {
+                          const newPhotos = [...formData.photos];
+                          newPhotos[index] = e.target.value;
+                          setFormData(prev => ({ ...prev, photos: newPhotos }));
+                        }}
+                        placeholder="https://example.com/image.jpg"
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    {photo && (
+                      <div className="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+                        <img
+                          src={photo}
+                          alt={`Preview ${index + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newPhotos = formData.photos.filter((_, i) => i !== index);
+                        setFormData(prev => ({ ...prev, photos: newPhotos }));
+                      }}
+                      className="flex-shrink-0 p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/20 rounded transition-colors"
+                    >
+                      <FaTrash size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+              💡 Tip: Use high-quality images from URLs. Recommended size: 800x500px or similar aspect ratio.
+            </p>
           </div>
 
           {/* Active Status */}

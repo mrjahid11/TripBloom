@@ -12,12 +12,14 @@ const Reviews = () => {
 
   const fetchReviews = async () => {
     try {
-      const response = await axios.get('/api/reviews');
-      setReviews(response.data);
+      const response = await axios.get('http://localhost:3000/api/reviews');
+      if (response.data && Array.isArray(response.data)) {
+        setReviews(response.data);
+      }
     } catch (error) {
       console.error('Error fetching reviews:', error);
       // Fallback data with working images
-      const newReviews = [
+      const fallbackReviews = [
         { 
           id: 1, 
           name: 'Asif Mahmood', 
@@ -61,9 +63,9 @@ const Reviews = () => {
           avatar: 'https://randomuser.me/api/portraits/men/6.jpg'
         },
       ];
-      setReviews(newReviews);
-      setRefreshKey(prev => prev + 1);
+      setReviews(fallbackReviews);
     }
+    setRefreshKey(prev => prev + 1);
   };
 
   const renderStars = (rating) => {

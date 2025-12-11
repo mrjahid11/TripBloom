@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import TourPackagesManager from './components/TourPackagesManager';
 import UsersManager from './components/UsersManager';
 import Hero from './components/Hero';
+import Stats from './components/Stats';
 import HowItWorks from './components/HowItWorks';
 import PopularDestinations from './components/PopularDestinations';
 import TourCategories from './components/TourCategories';
@@ -30,6 +31,7 @@ function App() {
           <div className="App bg-white dark:bg-gray-900 transition-colors duration-300">
             <Navbar />
             <Hero />
+            <Stats />
             <HowItWorks />
             <PopularDestinations />
             <TourCategories />
