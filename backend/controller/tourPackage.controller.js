@@ -5,6 +5,7 @@ import {
   setTourPackageActive,
   getTourPackage,
   listTourPackages,
+  searchTourPackages,
   deleteTourPackage
 } from '../service/tourPackage.service.js';
 import {
@@ -54,6 +55,44 @@ export async function deleteTourPackageController(req, res) {
   const pkg = await deleteTourPackage(packageId);
   if (!pkg) return res.status(404).json({ success: false, message: 'Package not found.' });
   res.json({ success: true, message: 'Package deleted.' });
+}
+
+// Customer-facing search/filter for packages
+export async function searchTourPackagesController(req, res) {
+  const {
+    type,
+    category,
+    destination,
+    minPrice,
+    maxPrice,
+    minDays,
+    maxDays,
+    search
+  } = req.query;
+
+  const result = await searchTourPackages({
+    type,
+    category,
+    destination,
+    minPrice,
+    maxPrice,
+    minDays,
+    maxDays,
+    search
+  });
+
+  if (result.error) {
+    return res.status(500).json({
+      success: false,
+      message: result.error
+    });
+  }
+
+  res.json({
+    success: true,
+    packages: result.packages,
+    count: result.packages.length
+  });
 }
 
 // Assign operators to a tour package

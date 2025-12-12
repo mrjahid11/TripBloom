@@ -69,7 +69,7 @@ app.post('/api/admin/users', createUserController); // Create user
 app.put('/api/admin/users/:userId', updateUserController); // Update user info
 app.delete('/api/admin/users/:userId', deactivateUserController); // Deactivate user
 
-import { createTourPackageController, updateTourPackageController, setTourPackageActiveController, getTourPackageController, listTourPackagesController, deleteTourPackageController } from './controller/tourPackage.controller.js';
+import { createTourPackageController, updateTourPackageController, setTourPackageActiveController, getTourPackageController, listTourPackagesController, searchTourPackagesController, deleteTourPackageController } from './controller/tourPackage.controller.js';
 // ...existing code...
 
 // Tour package management endpoints
@@ -79,6 +79,9 @@ app.patch('/api/admin/packages/:packageId/active', setTourPackageActiveControlle
 app.get('/api/admin/packages/:packageId', getTourPackageController); // Get package by ID
 app.get('/api/admin/packages', listTourPackagesController); // List packages
 app.delete('/api/admin/packages/:packageId', deleteTourPackageController); // Delete package
+
+// Customer-facing package search/filter endpoint
+app.get('/api/packages/search', searchTourPackagesController); // Search and filter packages for customers
 
 
 import { createGroupDepartureController, updateGroupDepartureController, listGroupDeparturesController, getGroupDepartureByIdController, deleteGroupDepartureController, setGroupDepartureStatusController } from './controller/groupDeparture.controller.js';
@@ -111,9 +114,55 @@ app.post('/api/admin/group-departures/:departureId/operators', addOperatorToDepa
 app.delete('/api/admin/group-departures/:departureId/operators/:operatorId', removeOperatorFromDepartureController);
 
 // Seat map endpoints for group departures
-import { getSeatMapController, updateSeatMapController } from './controller/groupDeparture.controller.js';
+import { getSeatMapController, updateSeatMapController, checkDepartureAvailabilityController, getAvailableDeparturesForPackageController } from './controller/groupDeparture.controller.js';
 app.get('/api/group-departure/:departureId/seat-map', getSeatMapController);
 app.put('/api/group-departure/:departureId/seat-map', updateSeatMapController);
+
+// Customer-facing departure availability endpoints
+app.get('/api/departures/:departureId/availability', checkDepartureAvailabilityController); // Check single departure availability
+app.get('/api/packages/:packageId/departures/available', getAvailableDeparturesForPackageController); // Get all available departures for package
+
+// Booking endpoints (customer)
+import {
+  createBookingController,
+  getBookingByIdController,
+  listBookingsController,
+  updateBookingController,
+  cancelBookingController,
+  addPaymentController,
+  getCustomerStatsController,
+  completeBookingController
+} from './controller/booking.controller.js';
+app.post('/api/bookings', createBookingController); // Create booking
+app.get('/api/bookings/:bookingId', getBookingByIdController); // Get booking by ID
+app.get('/api/bookings', listBookingsController); // List bookings with filters
+app.put('/api/bookings/:bookingId', updateBookingController); // Update booking
+app.post('/api/bookings/:bookingId/cancel', cancelBookingController); // Cancel booking
+app.post('/api/bookings/:bookingId/payment', addPaymentController); // Add payment
+app.get('/api/customers/:customerId/stats', getCustomerStatsController); // Customer stats
+app.post('/api/bookings/:bookingId/complete', completeBookingController); // Mark booking complete
+
+// Review endpoints (customer)
+import {
+  createReviewController,
+  getReviewByIdController,
+  listReviewsController,
+  updateReviewController,
+  deleteReviewController,
+  moderateReviewController,
+  markReviewHelpfulController,
+  getPackageRatingStatsController,
+  getCustomerReviewForPackageController
+} from './controller/review.controller.js';
+app.post('/api/reviews', createReviewController); // Create review
+app.get('/api/reviews/:reviewId', getReviewByIdController); // Get review by ID
+app.get('/api/reviews', listReviewsController); // List reviews with filters
+app.put('/api/reviews/:reviewId', updateReviewController); // Update review
+app.delete('/api/reviews/:reviewId', deleteReviewController); // Delete review
+app.patch('/api/reviews/:reviewId/moderate', moderateReviewController); // Moderate review (admin)
+app.post('/api/reviews/:reviewId/helpful', markReviewHelpfulController); // Mark review helpful
+app.get('/api/packages/:packageId/rating-stats', getPackageRatingStatsController); // Package rating stats
+app.get('/api/customers/:customerId/packages/:packageId/review', getCustomerReviewForPackageController); // Customer's review for package
 
 // Contact form endpoint
 app.post('/api/contact', (req, res) => {

@@ -79,6 +79,67 @@ export async function listTourPackages(filter = {}) {
   return await TourPackage.find(filter);
 }
 
+// Customer-facing search/filter for packages
+export async function searchTourPackages({
+  type,
+  category,
+  destination,
+  minPrice,
+  maxPrice,
+  minDays,
+  maxDays,
+  search
+}) {
+  try {
+    const filter = { isActive: true }; // Only show active packages to customers
+
+    // Type filter (PERSONAL or GROUP)
+    if (type) {
+      filter.type = type.toUpperCase();
+    }
+
+    // Category filter (for PERSONAL packages)
+    if (category) {
+      filter.category = category.toUpperCase();
+    }
+
+    // Destination search (case-insensitive partial match)
+    if (destination) {
+      filter.destinations = { $regex: destination, $options: 'i' };
+    }
+
+    // Price range
+    if (minPrice || maxPrice) {
+      filter.basePrice = {};
+      if (minPrice) filter.basePrice.$gte = parseFloat(minPrice);
+      if (maxPrice) filter.basePrice.$lte = parseFloat(maxPrice);
+    }
+
+    // Duration (days) range
+    if (minDays || maxDays) {
+      filter.defaultDays = {};
+      if (minDays) filter.defaultDays.$gte = parseInt(minDays);
+      if (maxDays) filter.defaultDays.$lte = parseInt(maxDays);
+    }
+
+    // Text search on title and description
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { destinations: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const packages = await TourPackage.find(filter).sort({ createdAt: -1 });
+
+    return { packages };
+  } catch (err) {
+    console.error('Error searching packages:', err);
+    return { error: 'Failed to search packages' };
+  }
+}
+
 // Delete package
 export async function deleteTourPackage(packageId) {
   return await TourPackage.findByIdAndDelete(packageId);
