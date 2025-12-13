@@ -22,6 +22,7 @@ import OperatorDashboard from './components/OperatorDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import GroupDeparturesManager from './components/GroupDeparturesManager';
 import OperatorsManager from './components/OperatorsManager';
+import MyReviews from './components/MyReviews';
 
 function App() {
   return (
@@ -58,6 +59,11 @@ function App() {
         <Route path="/customer" element={
           <ProtectedRoute role="customer">
             <CustomerDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/customer/reviews" element={
+          <ProtectedRoute role="customer">
+            <MyReviews />
           </ProtectedRoute>
         } />
         <Route path="/operator" element={

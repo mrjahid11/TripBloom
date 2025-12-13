@@ -4,16 +4,16 @@ import axios from 'axios';
 
 const Stats = () => {
   const [stats, setStats] = useState({
-    packages: 0,
-    customers: 0,
-    reviews: 0,
-    destinations: 0
+    totalPackages: 0,
+    happyTravelers: 0,
+    fiveStarReviews: 0,
+    totalDestinations: 0
   });
   const [animatedStats, setAnimatedStats] = useState({
-    packages: 0,
-    customers: 0,
-    reviews: 0,
-    destinations: 0
+    totalPackages: 0,
+    happyTravelers: 0,
+    fiveStarReviews: 0,
+    totalDestinations: 0
   });
 
   useEffect(() => {
@@ -22,7 +22,7 @@ const Stats = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get('http://localhost:3000/api/stats');
+      const response = await axios.get('http://localhost:5000/api/stats/platform');
       if (response.data.success) {
         const fetchedStats = response.data.stats;
         setStats(fetchedStats);
@@ -30,13 +30,13 @@ const Stats = () => {
         animateCounters(fetchedStats);
       }
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error('Failed to fetch stats:', error);
       // Fallback stats
       const fallbackStats = {
-        packages: 150,
-        customers: 5000,
-        reviews: 1200,
-        destinations: 50
+        totalPackages: 4,
+        happyTravelers: 0,
+        fiveStarReviews: 0,
+        totalDestinations: 50
       };
       setStats(fallbackStats);
       animateCounters(fallbackStats);
@@ -55,10 +55,10 @@ const Stats = () => {
       const progress = currentStep / steps;
 
       setAnimatedStats({
-        packages: Math.floor(targetStats.packages * progress),
-        customers: Math.floor(targetStats.customers * progress),
-        reviews: Math.floor(targetStats.reviews * progress),
-        destinations: Math.floor(targetStats.destinations * progress)
+        totalPackages: Math.floor(targetStats.totalPackages * progress),
+        happyTravelers: Math.floor(targetStats.happyTravelers * progress),
+        fiveStarReviews: Math.floor(targetStats.fiveStarReviews * progress),
+        totalDestinations: Math.floor(targetStats.totalDestinations * progress)
       });
 
       if (currentStep >= steps) {
@@ -71,28 +71,28 @@ const Stats = () => {
   const statsData = [
     {
       icon: <FaGlobeAmericas className="text-5xl" />,
-      value: animatedStats.packages,
+      value: animatedStats.totalPackages,
       label: 'Tour Packages',
       suffix: '+',
       color: 'from-blue-500 to-blue-600'
     },
     {
       icon: <FaUsers className="text-5xl" />,
-      value: animatedStats.customers,
+      value: animatedStats.happyTravelers,
       label: 'Happy Travelers',
       suffix: '+',
       color: 'from-green-500 to-green-600'
     },
     {
       icon: <FaStar className="text-5xl" />,
-      value: animatedStats.reviews,
+      value: animatedStats.fiveStarReviews,
       label: '5-Star Reviews',
       suffix: '+',
       color: 'from-yellow-500 to-yellow-600'
     },
     {
       icon: <FaMapMarkedAlt className="text-5xl" />,
-      value: animatedStats.destinations,
+      value: animatedStats.totalDestinations,
       label: 'Destinations',
       suffix: '+',
       color: 'from-purple-500 to-purple-600'

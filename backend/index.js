@@ -164,6 +164,11 @@ app.post('/api/reviews/:reviewId/helpful', markReviewHelpfulController); // Mark
 app.get('/api/packages/:packageId/rating-stats', getPackageRatingStatsController); // Package rating stats
 app.get('/api/customers/:customerId/packages/:packageId/review', getCustomerReviewForPackageController); // Customer's review for package
 
+// Statistics endpoints
+import { getPlatformStatsController, getBookingStatsController } from './controller/stats.controller.js';
+app.get('/api/stats/platform', getPlatformStatsController); // Get overall platform stats
+app.get('/api/stats/bookings', getBookingStatsController); // Get booking statistics
+
 // Contact form endpoint
 app.post('/api/contact', (req, res) => {
   const { name, email, message } = req.body;

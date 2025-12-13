@@ -66,13 +66,15 @@ const CustomerDashboard = () => {
         {/* Navigation Tabs */}
         <div className="flex space-x-4 mb-8 overflow-x-auto pb-2">
           {[
-            { icon: FaPlane, label: 'My Trips', active: true },
-            { icon: FaHeart, label: 'Saved Tours', active: false },
-            { icon: FaHistory, label: 'History', active: false },
-            { icon: FaUser, label: 'Profile', active: false },
+            { icon: FaPlane, label: 'My Trips', active: true, path: '/customer' },
+            { icon: FaStar, label: 'My Reviews', active: false, path: '/customer/reviews' },
+            { icon: FaHeart, label: 'Saved Tours', active: false, path: '/customer/saved' },
+            { icon: FaHistory, label: 'History', active: false, path: '/customer/history' },
+            { icon: FaUser, label: 'Profile', active: false, path: '/customer/profile' },
           ].map((tab, index) => (
             <button
               key={index}
+              onClick={() => tab.path && navigate(tab.path)}
               className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-semibold whitespace-nowrap transition-all ${
                 tab.active
                   ? 'bg-primary text-white shadow-lg'

@@ -12,10 +12,16 @@ const Reviews = () => {
 
   const fetchReviews = async () => {
     try {
-      const response = await axios.get('http://localhost:3000/api/reviews');
-      if (response.data && Array.isArray(response.data)) {
-        setReviews(response.data);
+      const response = await axios.get('http://localhost:5000/api/reviews');
+      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+        // Filter out reviews to show maximum 6 for landing page
+        const displayReviews = response.data.slice(0, 6);
+        setReviews(displayReviews);
+        setRefreshKey(prev => prev + 1);
+        return;
       }
+      // If no reviews from API, use fallback
+      throw new Error('No reviews available');
     } catch (error) {
       console.error('Error fetching reviews:', error);
       // Fallback data with working images
@@ -64,8 +70,8 @@ const Reviews = () => {
         },
       ];
       setReviews(fallbackReviews);
+      setRefreshKey(prev => prev + 1);
     }
-    setRefreshKey(prev => prev + 1);
   };
 
   const renderStars = (rating) => {
