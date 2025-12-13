@@ -5,11 +5,12 @@ import {
   FaTimes, FaMapMarkerAlt, FaStar, FaCalendarAlt, 
   FaUsers, FaBed, FaUtensils, FaCar, FaUserTie, FaClock, 
   FaCheck, FaPlane, FaShieldAlt, FaCamera, FaHeart,
-  FaChevronLeft, FaChevronRight, FaEdit
+  FaChevronLeft, FaChevronRight, FaEdit, FaCompressAlt
 } from 'react-icons/fa';
 
 const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }) => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [showImages, setShowImages] = useState(true);
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [bookingData, setBookingData] = useState({
     numTravelers: 1,
@@ -136,13 +137,22 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
             <FaTimes size={20} />
           </button>
 
-          {/* Image Gallery */}
-          <div className="relative h-96 overflow-hidden group">
+          {/* Image Gallery (collapsible) */}
+          <div className="relative overflow-hidden group" style={{height: showImages ? '24rem' : '4rem', transition: 'height 260ms ease'}}>
             <img
               src={images[activeImageIndex]}
               alt={packageData.title}
               className="w-full h-full object-cover"
+              style={{objectPosition: 'center bottom', transition: 'transform 260ms ease'}}
             />
+            {/* when collapsed we overlay a thin title bar */}
+            {!showImages && (
+              <div className="absolute inset-0 flex items-end">
+                <div className="w-full bg-gradient-to-t from-black/70 to-transparent p-3">
+                  <h2 className="text-lg font-semibold text-white">{packageData.title}</h2>
+                </div>
+              </div>
+            )}
             
             {/* Image overlay gradient */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
@@ -164,6 +174,15 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                 </button>
               </>
             )}
+
+            {/* Collapse / Expand Photos Button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowImages(v => !v); }}
+              className="absolute right-20 top-4 z-20 bg-white/90 dark:bg-gray-800/90 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 p-2 rounded-full shadow-lg transition-all"
+              title={showImages ? 'Collapse photos' : 'Show photos'}
+            >
+              <FaCompressAlt size={16} />
+            </button>
 
             {/* Image indicators */}
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
@@ -208,7 +227,7 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
           </div>
 
           {/* Content */}
-          <div className="p-8 max-h-[50vh] overflow-y-auto">
+          <div className="p-8 overflow-y-auto" style={{maxHeight: showImages ? '50vh' : 'calc(100vh - 6rem)', transition: 'max-height 260ms ease'}}>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Main Content */}
               <div className="lg:col-span-2 space-y-8">

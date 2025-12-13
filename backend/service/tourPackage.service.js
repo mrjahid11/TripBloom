@@ -1,6 +1,11 @@
 // tourPackage.service.js
 import { TourPackage, TOUR_PACKAGE_TYPES_ENUM, PERSONAL_CATEGORIES_ENUM } from '../model/tourPackage.model.js';
 
+// Helper to escape user input for use in RegExp
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Create new package
 export async function createTourPackage({ title, description, type, category, basePrice, defaultDays, defaultNights, inclusions, destinations, extras }) {
   if (!title || !type || !basePrice) {
@@ -121,27 +126,51 @@ export async function searchTourPackages({
       if (maxDays) filter.defaultDays.$lte = parseInt(maxDays);
     }
 
-    // Text search on title and description
+    // Text search on title/description/destinations
     if (search) {
-      // Split search term by common delimiters (comma, slash, dash)
-      // and extract meaningful keywords (ignore common words)
+      // Determine if the user supplied a detailed place (comma separated)
+      const isDetailedPlace = /[,\/\\-]/.test(search) || search.split(/\s+/).length >= 3;
+
+      // Split into candidate terms, remove very short and common words
       const searchTerms = search
         .split(/[,\/\-]/)
         .map(term => term.trim())
-        .filter(term => term.length > 2) // ignore very short terms
+        .filter(term => term.length > 2)
         .filter(term => !['district', 'division', 'the', 'and', 'or'].includes(term.toLowerCase()));
-      
+
       if (searchTerms.length > 0) {
-        // Create OR conditions for each search term
-        const orConditions = searchTerms.flatMap(term => [
-          { title: { $regex: term, $options: 'i' } },
-          { description: { $regex: term, $options: 'i' } },
-          { 'destinations.name': { $regex: term, $options: 'i' } },
-          { 'destinations.city': { $regex: term, $options: 'i' } },
-          { 'destinations.country': { $regex: term, $options: 'i' } }
-        ]);
-        
-        filter.$or = orConditions;
+        // If the query looks like a detailed place, use the first segment
+        // (usually the place name) as the primary destination term and
+        // only match destinations fields against that term. This prevents
+        // broad fuzzy matches when the user provided a full address.
+        if (isDetailedPlace) {
+          const primary = (search.split(/[,\/\-]/)[0] || '').trim();
+          if (primary.length > 2) {
+            const esc = escapeRegex(primary);
+            const re = { $regex: `\\b${esc}\\b`, $options: 'i' };
+            filter.$or = [
+              { 'destinations.name': re },
+              { 'destinations.city': re },
+              { 'destinations.country': re }
+            ];
+          } else {
+            // fallback to no matches if primary term too short
+            filter.$or = [{ _id: null }];
+          }
+        } else {
+          // General fuzzy search across title, description and destination fields
+          const orConditions = searchTerms.flatMap(term => {
+            const esc = escapeRegex(term);
+            return [
+              { title: { $regex: esc, $options: 'i' } },
+              { description: { $regex: esc, $options: 'i' } },
+              { 'destinations.name': { $regex: esc, $options: 'i' } },
+              { 'destinations.city': { $regex: esc, $options: 'i' } },
+              { 'destinations.country': { $regex: esc, $options: 'i' } }
+            ];
+          });
+          filter.$or = orConditions;
+        }
       }
     }
 

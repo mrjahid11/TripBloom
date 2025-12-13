@@ -9,6 +9,8 @@ const BrowsePackages = () => {
   const [searchParams] = useSearchParams();
   const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [suggestedPackages, setSuggestedPackages] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
@@ -32,6 +34,28 @@ const BrowsePackages = () => {
   useEffect(() => {
     fetchPackages();
   }, [typeFilter, categoryFilter, searchTerm]);
+
+  // When no packages are found, fetch popular destinations as alternatives
+  useEffect(() => {
+    const fetchAlternatives = async () => {
+      if (loading) return;
+      if (packages.length > 0) return;
+      try {
+        setLoadingSuggestions(true);
+        // Fetch active packages from backend as suggestions
+        const res = await axios.get('http://localhost:5000/api/packages/search');
+        if (res && res.data && Array.isArray(res.data.packages)) {
+          setSuggestedPackages(res.data.packages.slice(0, 6));
+        }
+      } catch (err) {
+        console.error('Failed to load suggested packages', err);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    };
+
+    fetchAlternatives();
+  }, [loading, packages.length]);
 
   const fetchPackages = async () => {
     setLoading(true);
@@ -120,7 +144,7 @@ const BrowsePackages = () => {
   const formatDestinations = (destinations) => {
     if (!destinations || destinations.length === 0) return 'Various locations';
     return destinations
-      .map(d => d.city || d.name || d.country)
+      .map(d => d.name || d.city || d.country)
       .filter(Boolean)
       .slice(0, 3)
       .join(', ') + (destinations.length > 3 ? '...' : '');
@@ -346,12 +370,54 @@ const BrowsePackages = () => {
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               Try adjusting your filters or search terms
             </p>
-            <button
-              onClick={clearFilters}
-              className="px-6 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
-            >
-              Clear All Filters
-            </button>
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <button
+                onClick={clearFilters}
+                className="px-6 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
+              >
+                Clear All Filters
+              </button>
+              <button
+                onClick={() => { setSearchTerm(''); setTypeFilter(''); setCategoryFilter(''); fetchPackages(); }}
+                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                Browse Popular
+              </button>
+            </div>
+
+            {/* Suggestions */}
+            <div className="mt-6">
+              <h4 className="text-lg font-semibold mb-4">Try visiting these places</h4>
+              {loadingSuggestions && (
+                <p className="text-sm text-gray-500">Loading suggestions...</p>
+              )}
+              {!loadingSuggestions && suggestedPackages.length === 0 && (
+                <p className="text-sm text-gray-500">No suggestions available right now.</p>
+              )}
+              {!loadingSuggestions && suggestedPackages.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-3">
+                  {suggestedPackages.map((pkg) => (
+                    <div key={pkg._id} className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-left shadow-sm cursor-pointer" onClick={() => handleViewDetails(pkg)}>
+                      <img src={getPackageImage(pkg)} alt={pkg.title} className="w-full h-40 object-cover rounded-md mb-3" />
+                      <div className="font-semibold text-gray-900 dark:text-white mb-1">{pkg.title}</div>
+                      <div className="text-sm text-gray-500 mb-2">{pkg.defaultDays} Days • ${pkg.basePrice}</div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">{pkg.description}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-gray-600 dark:text-gray-400">{formatDestinations(pkg.destinations)}</div>
+                        <div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleViewDetails(pkg); }}
+                            className="px-4 py-2 bg-primary text-white rounded-md text-sm font-medium"
+                          >
+                            View Details
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
