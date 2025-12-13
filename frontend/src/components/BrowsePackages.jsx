@@ -12,16 +12,26 @@ const BrowsePackages = () => {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
+  console.log('[BrowsePackages] Component rendered, searchParams:', Object.fromEntries(searchParams.entries()));
+
   // Filters
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || '');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
 
+  console.log('[BrowsePackages] Initial filters - searchTerm:', searchTerm, 'typeFilter:', typeFilter);
+
+  // Scroll to top when component mounts
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // Fetch packages when filters change or on initial load
   useEffect(() => {
     fetchPackages();
-  }, [typeFilter, categoryFilter, minPrice, maxPrice]);
+  }, [typeFilter, categoryFilter, searchTerm]);
 
   const fetchPackages = async () => {
     setLoading(true);
@@ -33,13 +43,16 @@ const BrowsePackages = () => {
       if (maxPrice) params.maxPrice = maxPrice;
       if (searchTerm) params.search = searchTerm;
 
+      console.log('[BrowsePackages] Fetching with params:', params);
       const response = await axios.get('http://localhost:5000/api/packages/search', { params });
       
+      console.log('[BrowsePackages] Response:', response.data);
       if (response.data.success) {
         setPackages(response.data.packages);
+        console.log('[BrowsePackages] Loaded packages:', response.data.packages.length);
       }
     } catch (error) {
-      console.error('Failed to fetch packages:', error);
+      console.error('[BrowsePackages] Failed to fetch packages:', error);
     } finally {
       setLoading(false);
     }
@@ -61,6 +74,56 @@ const BrowsePackages = () => {
     setMinPrice('');
     setMaxPrice('');
     setSearchTerm('');
+  };
+
+  // Helper function to get image for package based on destination
+  const getPackageImage = (pkg) => {
+    if (pkg.photos && pkg.photos.length > 0) {
+      return pkg.photos[0];
+    }
+    
+    // Get first destination for image selection
+    const firstDest = pkg.destinations?.[0];
+    if (!firstDest) {
+      return 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&h=400&fit=crop';
+    }
+    
+    const location = (firstDest.country || firstDest.city || firstDest.name || '').toLowerCase();
+    
+    // Map destinations to images
+    const imageMap = {
+      'bangladesh': 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=400&fit=crop',
+      'cox': 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800&h=400&fit=crop',
+      'sundarbans': 'https://images.unsplash.com/photo-1511497584788-876760111969?w=800&h=400&fit=crop',
+      'sylhet': 'https://images.unsplash.com/photo-1563622797-cc703a4b2921?w=800&h=400&fit=crop',
+      'bandarban': 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=400&fit=crop',
+      'rangamati': 'https://images.unsplash.com/photo-1540202404-a2f29016b523?w=800&h=400&fit=crop',
+      'saint martin': 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800&h=400&fit=crop',
+      'dubai': 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=800&h=400&fit=crop',
+      'thailand': 'https://images.unsplash.com/photo-1552465011-b4e21bf6e79a?w=800&h=400&fit=crop',
+      'malaysia': 'https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=800&h=400&fit=crop',
+      'maldives': 'https://images.unsplash.com/photo-1514282401047-d79a71a590e8?w=800&h=400&fit=crop',
+      'nepal': 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=800&h=400&fit=crop',
+      'singapore': 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=800&h=400&fit=crop',
+      'turkey': 'https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=800&h=400&fit=crop',
+      'bhutan': 'https://images.unsplash.com/photo-1609137144813-7d9921338f24?w=800&h=400&fit=crop',
+    };
+    
+    for (const [key, image] of Object.entries(imageMap)) {
+      if (location.includes(key)) return image;
+    }
+    
+    return 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&h=400&fit=crop';
+  };
+
+  // Format destinations for display
+  const formatDestinations = (destinations) => {
+    if (!destinations || destinations.length === 0) return 'Various locations';
+    return destinations
+      .map(d => d.city || d.name || d.country)
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(', ') + (destinations.length > 3 ? '...' : '');
   };
 
   return (
@@ -120,21 +183,31 @@ const BrowsePackages = () => {
                 <option value="DIAMOND">Diamond Elite</option>
               </select>
 
-              <input
-                type="number"
-                placeholder="Min Price"
-                value={minPrice}
-                onChange={(e) => setMinPrice(e.target.value)}
-                className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary font-bold text-lg pointer-events-none z-10">
+                  $
+                </div>
+                <input
+                  type="number"
+                  placeholder="Min Price"
+                  value={minPrice}
+                  onChange={(e) => setMinPrice(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-300 group-hover:border-primary/50"
+                />
+              </div>
 
-              <input
-                type="number"
-                placeholder="Max Price"
-                value={maxPrice}
-                onChange={(e) => setMaxPrice(e.target.value)}
-                className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              />
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary font-bold text-lg pointer-events-none z-10">
+                  $
+                </div>
+                <input
+                  type="number"
+                  placeholder="Max Price"
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-300 group-hover:border-primary/50"
+                />
+              </div>
             </div>
 
             {/* Action Buttons */}
@@ -199,9 +272,18 @@ const BrowsePackages = () => {
                       </span>
                     </div>
                   )}
-                  {/* Placeholder Image */}
-                  <div className="h-48 bg-gradient-to-br from-primary to-green-600 flex items-center justify-center">
-                    <FaMapMarkerAlt className="text-white text-6xl opacity-30" />
+                  {/* Package Image */}
+                  <div className="h-48 overflow-hidden bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600">
+                    <img
+                      src={getPackageImage(pkg)}
+                      alt={pkg.title}
+                      className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&h=400&fit=crop';
+                      }}
+                    />
                   </div>
                 </div>
 
@@ -219,7 +301,7 @@ const BrowsePackages = () => {
                   {pkg.destinations && pkg.destinations.length > 0 && (
                     <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-3">
                       <FaMapMarkerAlt className="mr-2 text-primary" />
-                      <span className="line-clamp-1">{pkg.destinations.join(', ')}</span>
+                      <span className="line-clamp-1">{formatDestinations(pkg.destinations)}</span>
                     </div>
                   )}
 
@@ -279,7 +361,8 @@ const BrowsePackages = () => {
         <TourDetailModal
           isOpen={showModal}
           onClose={() => setShowModal(false)}
-          tour={selectedPackage}
+          packageData={selectedPackage}
+          userRole="CUSTOMER"
         />
       )}
     </div>

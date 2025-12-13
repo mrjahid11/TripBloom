@@ -31,7 +31,12 @@ const PopularDestinations = () => {
             description: pkg.description,
             destinations: pkg.destinations
           }));
-        setDestinations(transformedPackages);
+        
+        // Select only 3 random packages for popular destinations
+        const shuffled = [...transformedPackages].sort(() => 0.5 - Math.random());
+        const selectedPackages = shuffled.slice(0, 3);
+        
+        setDestinations(selectedPackages);
       }
     } catch (error) {
       console.error('Error fetching destinations:', error);
@@ -82,15 +87,9 @@ const PopularDestinations = () => {
 
   const filters = ['All', 'Domestic', 'International', 'Day Tours', 'Multi-day'];
 
-  // Filter destinations based on selected filter
-  const filteredDestinations = destinations.filter((destination) => {
-    if (filter === 'all') return true;
-    if (filter === 'domestic') return destination.type === 'Domestic';
-    if (filter === 'international') return destination.type === 'International';
-    if (filter === 'day tours') return parseInt(destination.duration) === 1;
-    if (filter === 'multi-day') return parseInt(destination.duration) > 1;
-    return true;
-  });
+  // Since we're showing only 3 random packages, disable filtering
+  // Users can find more packages in Tour Categories section
+  const filteredDestinations = destinations;
 
   const handleViewDetails = async (destination) => {
     try {
@@ -125,31 +124,15 @@ const PopularDestinations = () => {
   };
 
   return (
-    <section id="destinations" className="section-container bg-white dark:bg-gradient-to-b dark:from-white dark:to-gray-50 dark:dark:from-gray-900 dark:dark:to-gray-800 border-y border-gray-100 dark:border-gray-800">
+    <div className="w-full bg-transparent backdrop-blur-sm dark:bg-gray-900/60 relative">
+      <div className="absolute inset-0 pointer-events-none z-0 bg-gradient-to-r from-emerald-50/20 via-transparent to-cyan-50/20"></div>
+      <section id="destinations" className="section-container bg-transparent py-12 lg:py-16 relative z-10">
       <h2 className="section-title dark:text-white animate-fade-in-up">Popular Destinations</h2>
       <p className="section-subtitle dark:text-gray-300 animate-fade-in-up" style={{animationDelay: '0.1s'}}>
-        Discover trending tours and breathtaking destinations
+        Discover our handpicked top destinations - explore more in Tour Categories
       </p>
 
-      {/* Filters */}
-      <div className="flex flex-wrap justify-center gap-4 mb-12 animate-fade-in-up" style={{animationDelay: '0.2s'}}>
-        {filters.map((f, index) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f.toLowerCase())}
-            className={`px-6 py-2 rounded-full font-semibold transition-all duration-300 transform hover:scale-105 ${
-              filter === f.toLowerCase()
-                ? 'bg-primary text-white shadow-lg scale-105'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-            }`}
-            style={{animationDelay: `${0.3 + index * 0.1}s`}}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      {/* Destinations Grid */}
+      {/* Destinations Grid - Show only 3 packages */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredDestinations.map((destination, index) => (
           <div
@@ -198,7 +181,8 @@ const PopularDestinations = () => {
         packageData={selectedPackage}
         userRole="CUSTOMER"
       />
-    </section>
+      </section>
+    </div>
   );
 };
 

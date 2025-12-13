@@ -84,7 +84,9 @@ const Reviews = () => {
   };
 
   return (
-    <section className="section-container bg-white dark:bg-gradient-to-b dark:from-gray-50 dark:to-white dark:dark:from-gray-800 dark:dark:to-gray-900 relative overflow-hidden border-y border-gray-100 dark:border-gray-800">
+    <div className="w-full bg-transparent backdrop-blur-sm dark:bg-gray-900/60 relative">
+      <div className="absolute inset-0 pointer-events-none z-0 bg-gradient-to-r from-sky-50/12 via-blue-50/6 to-indigo-50/14"></div>
+      <section className="section-container bg-transparent relative overflow-hidden py-12 lg:py-16 relative z-10">
       {/* Background Elements */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute top-0 right-0 w-96 h-96 bg-yellow-400 rounded-full filter blur-3xl animate-pulse-slow"></div>
@@ -128,7 +130,8 @@ const Reviews = () => {
       <div className="text-center mt-12 animate-fade-in-up" style={{animationDelay: '0.6s'}}>
         <button className="btn-secondary transform hover:scale-110 transition-all duration-300 hover:shadow-xl">View All Reviews</button>
       </div>
-    </section>
+      </section>
+    </div>
   );
 };
 

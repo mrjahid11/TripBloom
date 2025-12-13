@@ -42,7 +42,9 @@ const WhyChooseUs = () => {
   ];
 
   return (
-    <section id="about" className="section-container bg-gray-50 dark:bg-gradient-to-b dark:from-white dark:to-gray-50 dark:dark:from-gray-900 dark:dark:to-gray-800 relative overflow-hidden border-y border-gray-200 dark:border-gray-700">
+    <div className="w-full bg-transparent backdrop-blur-sm dark:bg-gray-900/60 relative">
+      <div className="absolute inset-0 pointer-events-none z-0 bg-gradient-to-r from-rose-50/14 via-pink-50/6 to-fuchsia-50/12"></div>
+      <section id="about" className="section-container bg-transparent relative overflow-hidden py-12 lg:py-16 relative z-10">
       {/* Animated Background Shapes */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute top-20 left-20 w-72 h-72 bg-purple-400 rounded-full filter blur-3xl animate-float"></div>
@@ -72,7 +74,8 @@ const WhyChooseUs = () => {
           </div>
         ))}
       </div>
-    </section>
+      </section>
+    </div>
   );
 };
 

@@ -30,7 +30,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={
-          <div className="App bg-white dark:bg-gray-900 transition-colors duration-300">
+          <div className="App bg-gradient-to-br from-green-50 via-blue-100 to-emerald-100 dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors duration-300">
             <Navbar />
             <Hero />
             <Stats />
@@ -73,6 +73,7 @@ function App() {
           </ProtectedRoute>
         } />
         <Route path="/packages" element={<BrowsePackages />} />
+        <Route path="/browse-packages" element={<BrowsePackages />} />
       </Routes>
     </BrowserRouter>
   );

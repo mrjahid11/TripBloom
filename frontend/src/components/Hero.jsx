@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { FaSearch, FaCalendarAlt, FaMapMarkerAlt } from 'react-icons/fa';
 
 const Hero = () => {
+  const navigate = useNavigate();
   const [searchData, setSearchData] = useState({
     destination: '',
     type: 'personal',
@@ -26,10 +28,12 @@ const Hero = () => {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    console.log('Searching for:', searchData);
+    
     const dest = (searchData.destination || '').trim();
+    const tourType = searchData.type || 'personal';
+    
+    // Save to search history
     if (dest) {
-      // Save to history (unique, most-recent-first, keep max 10)
       const normalized = dest;
       const updated = [normalized, ...searchHistory.filter(d => d.toLowerCase() !== normalized.toLowerCase())].slice(0, 10);
       setSearchHistory(updated);
@@ -40,6 +44,14 @@ const Hero = () => {
       }
       setShowSuggestions(false);
     }
+    
+    // Navigate to browse packages with search filters
+    const searchParams = new URLSearchParams();
+    if (dest) searchParams.set('search', dest);
+    if (tourType && tourType !== 'all') searchParams.set('type', tourType.toUpperCase());
+    
+    const queryString = searchParams.toString();
+    navigate(`/browse-packages${queryString ? `?${queryString}` : ''}`);
   };
 
   // Load search history from localStorage

@@ -103,10 +103,9 @@ export async function searchTourPackages({
       filter.category = category.toUpperCase();
     }
 
-    // Destination search (case-insensitive partial match)
-    if (destination) {
-      filter.destinations = { $regex: destination, $options: 'i' };
-    }
+    // Destination search - removed faulty regex on array field
+    // The destinations field is an array of objects, not a string
+    // So we can't use regex directly on it
 
     // Price range
     if (minPrice || maxPrice) {
@@ -124,14 +123,31 @@ export async function searchTourPackages({
 
     // Text search on title and description
     if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { destinations: { $regex: search, $options: 'i' } }
-      ];
+      // Split search term by common delimiters (comma, slash, dash)
+      // and extract meaningful keywords (ignore common words)
+      const searchTerms = search
+        .split(/[,\/\-]/)
+        .map(term => term.trim())
+        .filter(term => term.length > 2) // ignore very short terms
+        .filter(term => !['district', 'division', 'the', 'and', 'or'].includes(term.toLowerCase()));
+      
+      if (searchTerms.length > 0) {
+        // Create OR conditions for each search term
+        const orConditions = searchTerms.flatMap(term => [
+          { title: { $regex: term, $options: 'i' } },
+          { description: { $regex: term, $options: 'i' } },
+          { 'destinations.name': { $regex: term, $options: 'i' } },
+          { 'destinations.city': { $regex: term, $options: 'i' } },
+          { 'destinations.country': { $regex: term, $options: 'i' } }
+        ]);
+        
+        filter.$or = orConditions;
+      }
     }
 
-    const packages = await TourPackage.find(filter).sort({ createdAt: -1 });
+    const packages = await TourPackage.find(filter).sort({ createdAt: -1 }).limit(100);
+    
+    console.log(`[DEBUG] searchTourPackages: Query returned ${packages.length} packages out of total active packages`);
 
     return { packages };
   } catch (err) {

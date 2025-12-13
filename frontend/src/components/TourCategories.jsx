@@ -20,7 +20,9 @@ const TourCategories = () => {
   ];
 
   return (
-    <section id="packages" className="section-container bg-white dark:bg-gradient-to-b dark:from-gray-50 dark:to-white dark:dark:from-gray-800 dark:dark:to-gray-900 border-y border-gray-100 dark:border-gray-800">
+    <div className="w-full bg-transparent backdrop-blur-sm dark:bg-gray-900/60 relative">
+      <div className="absolute inset-0 pointer-events-none z-0 bg-gradient-to-r from-orange-50/15 via-yellow-50/6 to-amber-50/12"></div>
+      <section id="packages" className="section-container bg-transparent py-12 lg:py-16 relative z-10">
       <h2 className="section-title dark:text-white animate-fade-in-up">Tour Categories</h2>
       <p className="section-subtitle dark:text-gray-300 animate-fade-in-up" style={{animationDelay: '0.1s'}}>
         Choose between personalized tours or all-inclusive group packages
@@ -74,7 +76,8 @@ const TourCategories = () => {
           </button>
         </div>
       </div>
-    </section>
+      </section>
+    </div>
   );
 };
 

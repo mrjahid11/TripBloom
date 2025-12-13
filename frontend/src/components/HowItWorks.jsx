@@ -26,7 +26,9 @@ const HowItWorks = () => {
   ];
 
   return (
-    <section className="section-container bg-gray-50 dark:bg-gradient-to-b dark:from-gray-50 dark:to-white dark:dark:from-gray-800 dark:dark:to-gray-900 relative overflow-hidden border-y border-gray-200 dark:border-gray-700">
+    <div className="w-full bg-transparent backdrop-blur-sm dark:bg-gray-900/60 relative">
+      <div className="absolute inset-0 pointer-events-none z-0 bg-gradient-to-r from-purple-50/18 via-transparent to-blue-50/12"></div>
+      <section className="section-container bg-transparent relative overflow-hidden py-12 lg:py-16 relative z-10">
       {/* Background Decoration */}
       <div className="absolute inset-0 opacity-5 dark:opacity-10">
         <div className="absolute top-10 left-10 w-40 h-40 bg-primary rounded-full filter blur-3xl animate-pulse-slow"></div>
@@ -61,7 +63,8 @@ const HowItWorks = () => {
           </div>
         ))}
       </div>
-    </section>
+      </section>
+    </div>
   );
 };
 
