@@ -60,7 +60,7 @@ export async function createReview({ customerId, packageId, bookingId, rating, c
     await review.save();
 
     // Populate references
-    await review.populate('customerId', 'name email');
+    await review.populate('customerId', 'fullName email');
     await review.populate('packageId', 'title destination');
 
     return { review };
@@ -74,7 +74,7 @@ export async function createReview({ customerId, packageId, bookingId, rating, c
 export async function getReviewById(reviewId) {
   try {
     const review = await Review.findById(reviewId)
-      .populate('customerId', 'name email')
+      .populate('customerId', 'fullName email')
       .populate('packageId', 'title destination type category')
       .populate('bookingId', 'startDate endDate status');
 
@@ -113,7 +113,7 @@ export async function listReviews({ packageId, customerId, status, minRating, ma
     }
 
     const reviews = await Review.find(filter)
-      .populate('customerId', 'name email')
+      .populate('customerId', 'fullName email')
       .populate('packageId', 'title destination type category')
       .populate('bookingId', 'startDate endDate status')
       .sort({ createdAt: -1 });
@@ -148,7 +148,7 @@ export async function updateReview({ reviewId, customerId, rating, comment }) {
 
     await review.save();
 
-    await review.populate('customerId', 'name email');
+    await review.populate('customerId', 'fullName email');
     await review.populate('packageId', 'title destination');
 
     return { review };
@@ -203,7 +203,7 @@ export async function moderateReview({ reviewId, status, moderatorNote }) {
 
     await review.save();
 
-    await review.populate('customerId', 'name email');
+    await review.populate('customerId', 'fullName email');
     await review.populate('packageId', 'title destination');
 
     return { review };
@@ -274,7 +274,7 @@ export async function getPackageRatingStats(packageId) {
 export async function getCustomerReviewForPackage({ customerId, packageId }) {
   try {
     const review = await Review.findOne({ customerId, packageId })
-      .populate('customerId', 'name email')
+      .populate('customerId', 'fullName email')
       .populate('packageId', 'title destination')
       .populate('bookingId', 'startDate endDate status');
 

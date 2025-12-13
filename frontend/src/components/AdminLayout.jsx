@@ -3,7 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import ManageUsersMenu from './ManageUsersMenu';
 import { 
   FaUsers, FaRoute, FaChartLine, FaCog, FaSignOutAlt, FaBell, FaSearch, 
-  FaCalendar, FaDollarSign
+  FaCalendar, FaDollarSign, FaStar
 } from 'react-icons/fa';
 
 const AdminLayout = () => {
@@ -64,6 +64,14 @@ const AdminLayout = () => {
           >
             <FaDollarSign className="text-xl text-red-600 dark:text-red-400" />
             <span className="font-semibold">Refund Queue</span>
+          </button>
+          
+          <button 
+            onClick={() => navigate('/admin/reviews')}
+            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-yellow-50 dark:hover:bg-gray-700 rounded-lg transition-all"
+          >
+            <FaStar className="text-xl text-yellow-600 dark:text-yellow-400" />
+            <span className="font-semibold">Reviews</span>
           </button>
           
 

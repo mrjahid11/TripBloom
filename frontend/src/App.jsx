@@ -23,6 +23,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import GroupDeparturesManager from './components/GroupDeparturesManager';
 import OperatorsManager from './components/OperatorsManager';
 import MyReviews from './components/MyReviews';
+import BrowsePackages from './components/BrowsePackages';
 
 function App() {
   return (
@@ -71,6 +72,7 @@ function App() {
             <OperatorDashboard />
           </ProtectedRoute>
         } />
+        <Route path="/packages" element={<BrowsePackages />} />
       </Routes>
     </BrowserRouter>
   );

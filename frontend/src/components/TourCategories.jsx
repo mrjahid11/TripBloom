@@ -1,7 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FaUser, FaUsers, FaHotel, FaBus, FaUtensils, FaMapSigns } from 'react-icons/fa';
 
 const TourCategories = () => {
+  const navigate = useNavigate();
+  
   const personalFeatures = [
     { icon: <FaUser />, text: 'Custom itineraries tailored to you' },
     { icon: <FaMapSigns />, text: 'Flexible dates and destinations' },
@@ -40,7 +43,12 @@ const TourCategories = () => {
               </li>
             ))}
           </ul>
-          <button className="w-full btn-primary mt-6 transform hover:scale-105 transition-all duration-300">Customize Your Tour</button>
+          <button 
+            onClick={() => navigate('/packages?type=PERSONAL')}
+            className="w-full btn-primary mt-6 transform hover:scale-105 transition-all duration-300"
+          >
+            Customize Your Tour
+          </button>
         </div>
 
         {/* Group Tours */}
@@ -58,7 +66,10 @@ const TourCategories = () => {
               </li>
             ))}
           </ul>
-          <button className="w-full bg-secondary text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-600 transition-all duration-300 shadow-lg mt-6 transform hover:scale-105">
+          <button 
+            onClick={() => navigate('/packages?type=GROUP')}
+            className="w-full bg-secondary text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-600 transition-all duration-300 shadow-lg mt-6 transform hover:scale-105"
+          >
             Browse Group Packages
           </button>
         </div>
