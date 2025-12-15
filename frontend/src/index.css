@@ -217,3 +217,14 @@ html {
 .dark * {
   scrollbar-color: #10b981 #1f2937;
 }
+
+/* Contact focus highlight animation */
+.contact-focus {
+  animation: contactFocusAnim 2.5s ease;
+}
+
+@keyframes contactFocusAnim {
+  0% { box-shadow: 0 0 0 6px rgba(59,130,246,0.35); }
+  40% { background-color: rgba(59,130,246,0.06); }
+  100% { box-shadow: none; background-color: transparent; }
+}

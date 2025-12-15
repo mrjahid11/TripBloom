@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { FaSearch, FaFilter, FaStar, FaClock, FaDollarSign, FaMapMarkerAlt, FaUsers, FaUser } from 'react-icons/fa';
+import { FaSearch, FaFilter, FaStar, FaClock, FaDollarSign, FaMapMarkerAlt, FaUsers, FaUser, FaHeart, FaRegHeart } from 'react-icons/fa';
 import TourDetailModal from './TourDetailModal';
 
 const BrowsePackages = () => {
@@ -13,12 +13,14 @@ const BrowsePackages = () => {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [savedPackageIds, setSavedPackageIds] = useState(new Set());
 
   console.log('[BrowsePackages] Component rendered, searchParams:', Object.fromEntries(searchParams.entries()));
 
   // Filters
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || '');
+  const [scopeFilter, setScopeFilter] = useState(searchParams.get('scope') || '');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
@@ -33,7 +35,26 @@ const BrowsePackages = () => {
   // Fetch packages when filters change or on initial load
   useEffect(() => {
     fetchPackages();
-  }, [typeFilter, categoryFilter, searchTerm]);
+  }, [typeFilter, categoryFilter, searchTerm, scopeFilter]);
+
+  // Load saved packages for logged-in customer
+  useEffect(() => {
+    const loadSaved = async () => {
+      try {
+        const userRole = localStorage.getItem('userRole');
+        const userId = localStorage.getItem('userId');
+        if (userRole === 'customer' && userId) {
+          const res = await axios.get(`/api/users/${userId}/saved`);
+          if (res.data && res.data.packages) {
+            setSavedPackageIds(new Set(res.data.packages.map(p => p._id)));
+          }
+        }
+      } catch (err) {
+        console.debug('Failed to load saved packages', err?.message || err);
+      }
+    };
+    loadSaved();
+  }, []);
 
   // When no packages are found, fetch popular destinations as alternatives
   useEffect(() => {
@@ -62,6 +83,7 @@ const BrowsePackages = () => {
     try {
       const params = {};
       if (typeFilter) params.type = typeFilter;
+      if (scopeFilter) params.scope = scopeFilter;
       if (categoryFilter) params.category = categoryFilter;
       if (minPrice) params.minPrice = minPrice;
       if (maxPrice) params.maxPrice = maxPrice;
@@ -94,6 +116,7 @@ const BrowsePackages = () => {
 
   const clearFilters = () => {
     setTypeFilter('');
+    setScopeFilter('');
     setCategoryFilter('');
     setMinPrice('');
     setMaxPrice('');
@@ -183,29 +206,39 @@ const BrowsePackages = () => {
             </div>
 
             {/* Filters Row */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              >
-                <option value="">All Types</option>
-                <option value="PERSONAL">Personal Tours</option>
-                <option value="GROUP">Group Tours</option>
-              </select>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="">All Types</option>
+                  <option value="PERSONAL">Personal Tours</option>
+                  <option value="GROUP">Group Tours</option>
+                </select>
 
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                disabled={typeFilter === 'GROUP'}
-              >
-                <option value="">All Categories</option>
-                <option value="SILVER">Silver</option>
-                <option value="GOLD">Gold</option>
-                <option value="PLATINUM">Platinum</option>
-                <option value="DIAMOND">Diamond Elite</option>
-              </select>
+                <select
+                  value={scopeFilter}
+                  onChange={(e) => setScopeFilter(e.target.value)}
+                  className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="">All Regions</option>
+                  <option value="DOMESTIC">Domestic</option>
+                  <option value="INTERNATIONAL">International</option>
+                </select>
+
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  disabled={typeFilter === 'GROUP'}
+                >
+                  <option value="">All Categories</option>
+                  <option value="SILVER">Silver</option>
+                  <option value="GOLD">Gold</option>
+                  <option value="PLATINUM">Platinum</option>
+                  <option value="DIAMOND">Diamond Elite</option>
+                </select>
 
               <div className="relative group">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-primary font-bold text-lg pointer-events-none z-10">
@@ -346,15 +379,51 @@ const BrowsePackages = () => {
                         {pkg.type === 'GROUP' ? '/person' : 'starting'}
                       </span>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewDetails(pkg);
-                      }}
-                      className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
-                    >
-                      View Details
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewDetails(pkg);
+                        }}
+                        className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                      >
+                        View Details
+                      </button>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const userId = localStorage.getItem('userId');
+                          if (!userId) {
+                            // prompt login
+                            localStorage.setItem('afterLoginGoto', window.location.pathname);
+                            window.dispatchEvent(new CustomEvent('openAuthModal'));
+                            return;
+                          }
+                          const pkgId = pkg._id;
+                          const isSaved = savedPackageIds.has(pkgId);
+                          // Optimistic UI update
+                          const next = new Set(savedPackageIds);
+                          if (isSaved) next.delete(pkgId); else next.add(pkgId);
+                          setSavedPackageIds(next);
+                          try {
+                            if (isSaved) {
+                              await axios.delete(`/api/users/${userId}/save/${pkgId}`);
+                            } else {
+                              await axios.post(`/api/users/${userId}/save/${pkgId}`);
+                            }
+                          } catch (err) {
+                            // rollback on error
+                            const rollback = new Set(savedPackageIds);
+                            setSavedPackageIds(rollback);
+                            console.error('Failed to toggle saved package', err);
+                          }
+                        }}
+                        className="p-2 rounded-full text-primary hover:text-red-600 transition-colors"
+                        aria-label="Save package"
+                      >
+                        {savedPackageIds.has(pkg._id) ? <FaHeart className="text-red-600" /> : <FaRegHeart />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -378,7 +447,7 @@ const BrowsePackages = () => {
                 Clear All Filters
               </button>
               <button
-                onClick={() => { setSearchTerm(''); setTypeFilter(''); setCategoryFilter(''); fetchPackages(); }}
+                onClick={() => { setSearchTerm(''); setTypeFilter(''); setScopeFilter(''); setCategoryFilter(''); setMinPrice(''); setMaxPrice(''); fetchPackages(); }}
                 className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
               >
                 Browse Popular

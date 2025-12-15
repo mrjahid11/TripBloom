@@ -93,7 +93,8 @@ export async function searchTourPackages({
   maxPrice,
   minDays,
   maxDays,
-  search
+  search, 
+  scope
 }) {
   try {
     const filter = { isActive: true }; // Only show active packages to customers
@@ -171,6 +172,21 @@ export async function searchTourPackages({
           });
           filter.$or = orConditions;
         }
+      }
+    }
+
+    // Scope filter: domestic vs international
+    // HOME_COUNTRY can be set in the environment; default to 'Bangladesh'
+    const homeCountry = (process.env.HOME_COUNTRY || 'Bangladesh').trim();
+    if (scope) {
+      const s = String(scope).toUpperCase();
+      if (s === 'DOMESTIC') {
+        // Select packages where ALL destinations are in homeCountry
+        // i.e. there is NO destination with country != homeCountry
+        filter.destinations = { $not: { $elemMatch: { country: { $ne: homeCountry } } } };
+      } else if (s === 'INTERNATIONAL') {
+        // Select packages with at least one destination outside homeCountry
+        filter.destinations = { $elemMatch: { country: { $ne: homeCountry } } };
       }
     }
 

@@ -31,6 +31,13 @@ const Hero = () => {
     
     const dest = (searchData.destination || '').trim();
     const tourType = searchData.type || 'personal';
+    // prevent past dates
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (searchData.dates && searchData.dates < todayStr) {
+      // normalize to today if a past date somehow selected
+      searchData.dates = todayStr;
+      setSearchData({...searchData});
+    }
     
     // Save to search history
     if (dest) {
@@ -210,14 +217,11 @@ const Hero = () => {
           Plan your dream personal or group tour with ease and safety.
         </p>
 
-        {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6 animate-fade-in-up" style={{animationDelay: '0.4s'}}>
-          <button className="bg-white text-primary px-8 py-4 rounded-lg font-bold text-lg hover:bg-gray-100 transition-all duration-300 shadow-2xl hover:shadow-xl transform hover:-translate-y-2 hover:scale-105">
-            Book a Trip
-          </button>
-          <a 
+        {/* CTA Buttons: single centered CTA */}
+        <div className="flex justify-center mb-6 animate-fade-in-up" style={{animationDelay: '0.4s'}}>
+          <a
             href="#packages"
-            className="group relative bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 text-white px-8 py-4 rounded-lg font-bold text-lg transition-all duration-300 shadow-2xl transform hover:-translate-y-2 hover:scale-105 overflow-hidden"
+            className="group relative bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 text-white px-10 py-4 rounded-lg font-bold text-lg transition-all duration-300 shadow-2xl transform hover:-translate-y-2 hover:scale-105 overflow-hidden mx-auto"
             onClick={(e) => {
               e.preventDefault();
               document.getElementById('packages')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -280,7 +284,16 @@ const Hero = () => {
               <input
                 type="date"
                 value={searchData.dates}
-                onChange={(e) => setSearchData({...searchData, dates: e.target.value})}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const today = new Date().toISOString().split('T')[0];
+                  if (val && val < today) {
+                    setSearchData({...searchData, dates: today});
+                  } else {
+                    setSearchData({...searchData, dates: val});
+                  }
+                }}
+                min={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-gray-800"
               />
             </div>

@@ -62,6 +62,7 @@ export async function deactivateUser({ userId }) {
 
 // user.service.js
 import { User, ROLES } from '../model/user.model.js';
+import { TourPackage } from '../model/tourPackage.model.js';
 
 
 export async function registerUser({ fullName, email, phone, passwordHash, roles }) {
@@ -95,4 +96,32 @@ export async function loginUser({ email, passwordHash }) {
   // Allow login for any active user, return user info and roles
   // TODO: Generate JWT token here and return it
   return { user: { _id: user._id, fullName: user.fullName, email: user.email, roles: user.roles } };
+}
+
+// Saved packages management
+export async function getSavedPackagesForUser({ userId }) {
+  const user = await User.findById(userId).populate('savedPackages');
+  if (!user) return { error: 'User not found.' };
+  return { packages: user.savedPackages || [] };
+}
+
+export async function savePackageForUser({ userId, packageId }) {
+  const user = await User.findById(userId);
+  if (!user) return { error: 'User not found.' };
+  const pkg = await TourPackage.findById(packageId);
+  if (!pkg) return { error: 'Package not found.' };
+  const exists = user.savedPackages?.some(id => id.toString() === packageId.toString());
+  if (!exists) {
+    user.savedPackages = [...(user.savedPackages || []), pkg._id];
+    await user.save();
+  }
+  return { success: true };
+}
+
+export async function unsavePackageForUser({ userId, packageId }) {
+  const user = await User.findById(userId);
+  if (!user) return { error: 'User not found.' };
+  user.savedPackages = (user.savedPackages || []).filter(id => id.toString() !== packageId.toString());
+  await user.save();
+  return { success: true };
 }

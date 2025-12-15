@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaPlane, FaHeart, FaHistory, FaUser, FaSignOutAlt, FaMapMarkedAlt, FaCalendarAlt, FaStar } from 'react-icons/fa';
 
@@ -23,11 +23,24 @@ const CustomerDashboard = () => {
     },
   ];
 
-  const savedTours = [
-    { name: 'Bali Adventure', price: '$1,299', rating: 4.8 },
-    { name: 'Swiss Alps Trek', price: '$2,199', rating: 4.9 },
-    { name: 'Greek Islands Cruise', price: '$1,899', rating: 4.7 },
-  ];
+  const [savedTours, setSavedTours] = useState([]);
+
+  useEffect(() => {
+    const loadSaved = async () => {
+      try {
+        const userId = localStorage.getItem('userId');
+        if (!userId) return;
+        const res = await fetch(`/api/users/${userId}/saved`);
+        const data = await res.json();
+        if (data && data.packages) {
+          setSavedTours(data.packages.map(p => ({ name: p.title, price: `$${p.basePrice}`, rating: (p.rating || 4.5) })));
+        }
+      } catch (err) {
+        console.error('Failed to load saved tours', err);
+      }
+    };
+    loadSaved();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">

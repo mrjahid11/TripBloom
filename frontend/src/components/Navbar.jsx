@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FaBars, FaTimes, FaMoon, FaSun } from 'react-icons/fa';
 import { useDarkMode } from '../context/DarkModeContext';
 import AuthModal from './AuthModal';
@@ -22,6 +22,21 @@ const Navbar = () => {
   const userRole = localStorage.getItem('userRole');
   const [showDropdown, setShowDropdown] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleBookNow = (e) => {
+    e && e.preventDefault && e.preventDefault();
+    // If we're on the homepage, scroll to the packages section if present
+    if (location.pathname === '/' || location.hash === '#home') {
+      const el = document.getElementById('packages');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
+    // Otherwise navigate to the browse packages page
+    navigate('/browse-packages');
+  };
 
   return (
     <nav className="bg-white/95 dark:bg-gray-900 shadow-lg fixed w-full top-0 z-50 transition-colors duration-300 backdrop-blur-md border-b border-gray-200 dark:border-gray-800">
@@ -57,7 +72,7 @@ const Navbar = () => {
 
           {/* CTA/User Buttons */}
           <div className="hidden md:flex items-center space-x-3 relative">
-            <button className="btn-primary">Book Now</button>
+            <button onClick={handleBookNow} className="btn-primary">Book Now</button>
             {!userName ? (
               <button 
                 onClick={() => setShowAuthModal(true)}
@@ -169,7 +184,7 @@ const Navbar = () => {
                 {link.name}
               </a>
             ))}
-            <button className="w-full btn-primary mt-2">Book Now</button>
+            <button onClick={(e) => { handleBookNow(e); setIsOpen(false); }} className="w-full btn-primary mt-2">Book Now</button>
             <button 
               onClick={() => {
                 setShowAuthModal(true);

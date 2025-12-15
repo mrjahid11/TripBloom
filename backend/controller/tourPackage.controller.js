@@ -78,7 +78,8 @@ export async function searchTourPackagesController(req, res) {
     maxPrice,
     minDays,
     maxDays,
-    search
+    search,
+    scope: req.query.scope
   });
 
   if (result.error) {

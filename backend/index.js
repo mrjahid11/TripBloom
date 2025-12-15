@@ -22,7 +22,7 @@ import { ROLES, User } from './model/user.model.js';
 // Remove username index if it exists (for migration from old schema)
 User.collection.dropIndex('username_1').catch(() => {});
 
-import { signupController, loginController, requireRole, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController } from './controller/user.controller.js';
+import { signupController, loginController, requireRole, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController, getSavedPackagesController, savePackageController, unsavePackageController } from './controller/user.controller.js';
 import { getOperatorDashboardController, getOperatorProfileController, updateOperatorProfileController } from './controller/operator.controller.js';
 
 
@@ -166,15 +166,16 @@ app.get('/api/customers/:customerId/packages/:packageId/review', getCustomerRevi
 
 // Statistics endpoints
 import { getPlatformStatsController, getBookingStatsController } from './controller/stats.controller.js';
+import { createContactController, listContactsController, getContactController, markContactHandledController } from './controller/contact.controller.js';
 app.get('/api/stats/platform', getPlatformStatsController); // Get overall platform stats
 app.get('/api/stats/bookings', getBookingStatsController); // Get booking statistics
 
-// Contact form endpoint
-app.post('/api/contact', (req, res) => {
-  const { name, email, message } = req.body;
-  console.log('Contact form submission:', { name, email, message });
-  res.json({ success: true, message: 'Message received. We will contact you soon!' });
-});
+// Contact form endpoint (store submissions)
+app.post('/api/contact', createContactController);
+// Admin: list and manage contact messages
+app.get('/api/admin/contacts', requireRole(ROLES.ADMIN), listContactsController);
+app.get('/api/admin/contacts/:id', requireRole(ROLES.ADMIN), getContactController);
+app.post('/api/admin/contacts/:id/handled', requireRole(ROLES.ADMIN), markContactHandledController);
 
 // Newsletter subscription
 app.post('/api/newsletter', (req, res) => {
@@ -185,6 +186,11 @@ app.post('/api/newsletter', (req, res) => {
 
 // Get all users (for testing/demo only)
 app.get('/api/users', getAllUsersController);
+
+// User saved packages endpoints
+app.get('/api/users/:userId/saved', getSavedPackagesController);
+app.post('/api/users/:userId/save/:packageId', savePackageController);
+app.delete('/api/users/:userId/save/:packageId', unsavePackageController);
 
 app.listen(PORT, () => {
   console.log(`🌸 TripBloom server running on port ${PORT}`);

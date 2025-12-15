@@ -17,6 +17,7 @@ import Contact from './components/Contact';
 import Footer from './components/Footer';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLayout from './components/AdminLayout';
+import AdminContacts from './components/AdminContacts';
 import CustomerDashboard from './components/CustomerDashboard';
 import OperatorDashboard from './components/OperatorDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -49,6 +50,7 @@ function App() {
           </ProtectedRoute>
         }>
           <Route index element={<AdminDashboard />} />
+          <Route path="contacts" element={<AdminContacts />} />
           <Route path="departures" element={<GroupDeparturesManager />} />
           <Route path="operators" element={<OperatorsManager />} />
           <Route path="packages" element={<TourPackagesManager />} />

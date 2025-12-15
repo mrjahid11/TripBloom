@@ -1,13 +1,50 @@
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import ManageUsersMenu from './ManageUsersMenu';
 import { 
   FaUsers, FaRoute, FaChartLine, FaCog, FaSignOutAlt, FaBell, FaSearch, 
-  FaCalendar, FaDollarSign, FaStar
+  FaCalendar, FaDollarSign, FaStar, FaEnvelope
 } from 'react-icons/fa';
 
 const AdminLayout = () => {
   const navigate = useNavigate();
+
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadList, setUnreadList] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notifRef = useRef(null);
+
+  const fetchUnread = async () => {
+    try {
+      const role = localStorage.getItem('userRole') || '';
+      const res = await axios.get('/api/admin/contacts', { headers: { 'x-user-role': role } });
+      if (res.data && Array.isArray(res.data.contacts)) {
+        const unread = res.data.contacts.filter(c => !c.handled).slice(0,5);
+        setUnreadList(unread);
+        setUnreadCount(unread.length);
+      }
+    } catch (err) {
+      // ignore polling errors
+      console.debug('Unread fetch failed', err?.message || err);
+    }
+  };
+
+  useEffect(() => {
+    fetchUnread();
+    const t = setInterval(fetchUnread, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-900 dark:bg-gray-900 flex">
@@ -56,6 +93,14 @@ const AdminLayout = () => {
           >
             <FaCalendar className="text-xl text-purple-600 dark:text-purple-400" />
             <span className="font-semibold">Departures</span>
+          </button>
+          
+          <button 
+            onClick={() => navigate('/admin/contacts')}
+            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700 rounded-lg transition-all"
+          >
+            <FaEnvelope className="text-xl text-indigo-600 dark:text-indigo-400" />
+            <span className="font-semibold">Contact Messages</span>
           </button>
           
           <button 
@@ -116,10 +161,38 @@ const AdminLayout = () => {
                 />
                 <FaSearch className="absolute left-3 top-3 text-gray-400" />
               </div>
-              <button className="relative p-2 text-gray-300 dark:text-gray-300 hover:text-primary transition-colors">
-                <FaBell size={20} />
-                <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
-              </button>
+              <div className="relative" ref={notifRef}>
+                <button onClick={() => setShowNotifications(v => !v)} className="relative p-2 text-gray-300 dark:text-gray-300 hover:text-primary transition-colors">
+                  <FaBell size={20} />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-white bg-red-600 rounded-full animate-pulse">{unreadCount}</span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
+                    <div className="p-3 border-b border-gray-100 dark:border-gray-700 font-semibold">Notifications</div>
+                    <div className="max-h-60 overflow-auto">
+                      {unreadList.length === 0 && <div className="p-4 text-sm text-gray-500">No new messages</div>}
+                      {unreadList.map(n => (
+                        <button key={n._id} onClick={() => { setShowNotifications(false); navigate(`/admin/contacts?focus=${n._id}`); }} className="w-full text-left p-3 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" aria-hidden="true"></span>
+                              <div className="font-medium text-sm">{n.name}</div>
+                            </div>
+                            <div className="text-xs text-gray-400">{new Date(n.createdAt).toLocaleTimeString()}</div>
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-300 truncate">{n.message}</div>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="p-2 text-center border-t border-gray-100 dark:border-gray-700">
+                      <button onClick={() => { setShowNotifications(false); navigate('/admin/contacts'); }} className="text-sm text-primary">View all</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

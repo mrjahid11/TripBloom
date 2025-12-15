@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema({
     enum: ['ADMIN', 'admin', 'CUSTOMER', 'customer', 'TOUR_OPERATOR', 'tour_operator'],
     required: true
   },
+  savedPackages: [{ type: mongoose.Schema.Types.ObjectId, ref: 'TourPackage' }],
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
 });
