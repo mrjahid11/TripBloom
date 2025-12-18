@@ -1,6 +1,11 @@
 // tourPackage.service.js
 import { TourPackage, TOUR_PACKAGE_TYPES_ENUM, PERSONAL_CATEGORIES_ENUM } from '../model/tourPackage.model.js';
 
+// Helper to escape user input for use in RegExp
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Create new package
 export async function createTourPackage({ title, description, type, category, basePrice, defaultDays, defaultNights, inclusions, destinations, extras }) {
   if (!title || !type || !basePrice) {
@@ -77,6 +82,123 @@ export async function getTourPackage(packageId) {
 // List all packages
 export async function listTourPackages(filter = {}) {
   return await TourPackage.find(filter);
+}
+
+// Customer-facing search/filter for packages
+export async function searchTourPackages({
+  type,
+  category,
+  destination,
+  minPrice,
+  maxPrice,
+  minDays,
+  maxDays,
+  search, 
+  scope
+}) {
+  try {
+    const filter = { isActive: true }; // Only show active packages to customers
+
+    // Type filter (PERSONAL or GROUP)
+    if (type) {
+      filter.type = type.toUpperCase();
+    }
+
+    // Category filter (for PERSONAL packages)
+    if (category) {
+      filter.category = category.toUpperCase();
+    }
+
+    // Destination search - removed faulty regex on array field
+    // The destinations field is an array of objects, not a string
+    // So we can't use regex directly on it
+
+    // Price range
+    if (minPrice || maxPrice) {
+      filter.basePrice = {};
+      if (minPrice) filter.basePrice.$gte = parseFloat(minPrice);
+      if (maxPrice) filter.basePrice.$lte = parseFloat(maxPrice);
+    }
+
+    // Duration (days) range
+    if (minDays || maxDays) {
+      filter.defaultDays = {};
+      if (minDays) filter.defaultDays.$gte = parseInt(minDays);
+      if (maxDays) filter.defaultDays.$lte = parseInt(maxDays);
+    }
+
+    // Text search on title/description/destinations
+    if (search) {
+      // Determine if the user supplied a detailed place (comma separated)
+      const isDetailedPlace = /[,\/\\-]/.test(search) || search.split(/\s+/).length >= 3;
+
+      // Split into candidate terms, remove very short and common words
+      const searchTerms = search
+        .split(/[,\/\-]/)
+        .map(term => term.trim())
+        .filter(term => term.length > 2)
+        .filter(term => !['district', 'division', 'the', 'and', 'or'].includes(term.toLowerCase()));
+
+      if (searchTerms.length > 0) {
+        // If the query looks like a detailed place, use the first segment
+        // (usually the place name) as the primary destination term and
+        // only match destinations fields against that term. This prevents
+        // broad fuzzy matches when the user provided a full address.
+        if (isDetailedPlace) {
+          const primary = (search.split(/[,\/\-]/)[0] || '').trim();
+          if (primary.length > 2) {
+            const esc = escapeRegex(primary);
+            const re = { $regex: `\\b${esc}\\b`, $options: 'i' };
+            filter.$or = [
+              { 'destinations.name': re },
+              { 'destinations.city': re },
+              { 'destinations.country': re }
+            ];
+          } else {
+            // fallback to no matches if primary term too short
+            filter.$or = [{ _id: null }];
+          }
+        } else {
+          // General fuzzy search across title, description and destination fields
+          const orConditions = searchTerms.flatMap(term => {
+            const esc = escapeRegex(term);
+            return [
+              { title: { $regex: esc, $options: 'i' } },
+              { description: { $regex: esc, $options: 'i' } },
+              { 'destinations.name': { $regex: esc, $options: 'i' } },
+              { 'destinations.city': { $regex: esc, $options: 'i' } },
+              { 'destinations.country': { $regex: esc, $options: 'i' } }
+            ];
+          });
+          filter.$or = orConditions;
+        }
+      }
+    }
+
+    // Scope filter: domestic vs international
+    // HOME_COUNTRY can be set in the environment; default to 'Bangladesh'
+    const homeCountry = (process.env.HOME_COUNTRY || 'Bangladesh').trim();
+    if (scope) {
+      const s = String(scope).toUpperCase();
+      if (s === 'DOMESTIC') {
+        // Select packages where ALL destinations are in homeCountry
+        // i.e. there is NO destination with country != homeCountry
+        filter.destinations = { $not: { $elemMatch: { country: { $ne: homeCountry } } } };
+      } else if (s === 'INTERNATIONAL') {
+        // Select packages with at least one destination outside homeCountry
+        filter.destinations = { $elemMatch: { country: { $ne: homeCountry } } };
+      }
+    }
+
+    const packages = await TourPackage.find(filter).sort({ createdAt: -1 }).limit(100);
+    
+    console.log(`[DEBUG] searchTourPackages: Query returned ${packages.length} packages out of total active packages`);
+
+    return { packages };
+  } catch (err) {
+    console.error('Error searching packages:', err);
+    return { error: 'Failed to search packages' };
+  }
 }
 
 // Delete package

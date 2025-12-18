@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const travelerSchema = new mongoose.Schema({
   fullName: {
@@ -207,4 +207,4 @@ bookingSchema.methods.addPayment = function(paymentData) {
 
 const Booking = mongoose.model('Booking', bookingSchema);
 
-module.exports = Booking;
+export default Booking;

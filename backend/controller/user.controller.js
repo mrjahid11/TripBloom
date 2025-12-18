@@ -52,6 +52,40 @@ export async function deactivateUserController(req, res) {
     res.status(500).json({ success: false, message: 'Server error', error: err.message });
   }
 }
+import { getSavedPackagesForUser, savePackageForUser, unsavePackageForUser } from '../service/user.service.js';
+
+export async function getSavedPackagesController(req, res) {
+  const { userId } = req.params;
+  try {
+    const result = await getSavedPackagesForUser({ userId });
+    if (result.error) return res.status(404).json({ success: false, message: result.error });
+    res.json({ success: true, packages: result.packages });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
+
+export async function savePackageController(req, res) {
+  const { userId, packageId } = req.params;
+  try {
+    const result = await savePackageForUser({ userId, packageId });
+    if (result.error) return res.status(404).json({ success: false, message: result.error });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
+
+export async function unsavePackageController(req, res) {
+  const { userId, packageId } = req.params;
+  try {
+    const result = await unsavePackageForUser({ userId, packageId });
+    if (result.error) return res.status(404).json({ success: false, message: result.error });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
 import { User } from '../model/user.model.js';
 // Get all users (for testing/demo only)
 export async function getAllUsersController(req, res) {
@@ -95,8 +129,12 @@ export async function loginController(req, res) {
 // Simulated role-based middleware
 export function requireRole(role) {
   return (req, res, next) => {
-    const userRole = req.body.role;
-    if (userRole === role) {
+    // Allow role to be supplied via request header (x-user-role) or body for compatibility
+    const userRole = (req.headers['x-user-role'] || req.headers['user-role'] || req.body.role || '').toString();
+    if (!userRole) {
+      return res.status(403).json({ success: false, message: 'Forbidden: role not provided.' });
+    }
+    if (userRole.toLowerCase() === role.toLowerCase()) {
       return next();
     }
     return res.status(403).json({ success: false, message: 'Forbidden: insufficient role.' });

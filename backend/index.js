@@ -1,4 +1,6 @@
 import { sendMessageController, getMessagesController, getBroadcastMessagesController } from './controller/message.controller.js';
+import { Review } from './model/review.model.js';
+import { TourPackage } from './model/tourPackage.model.js';
 
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
@@ -20,7 +22,7 @@ import { ROLES, User } from './model/user.model.js';
 // Remove username index if it exists (for migration from old schema)
 User.collection.dropIndex('username_1').catch(() => {});
 
-import { signupController, loginController, requireRole, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController } from './controller/user.controller.js';
+import { signupController, loginController, requireRole, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController, getSavedPackagesController, savePackageController, unsavePackageController } from './controller/user.controller.js';
 import { getOperatorDashboardController, getOperatorProfileController, updateOperatorProfileController } from './controller/operator.controller.js';
 
 
@@ -67,7 +69,7 @@ app.post('/api/admin/users', createUserController); // Create user
 app.put('/api/admin/users/:userId', updateUserController); // Update user info
 app.delete('/api/admin/users/:userId', deactivateUserController); // Deactivate user
 
-import { createTourPackageController, updateTourPackageController, setTourPackageActiveController, getTourPackageController, listTourPackagesController, deleteTourPackageController } from './controller/tourPackage.controller.js';
+import { createTourPackageController, updateTourPackageController, setTourPackageActiveController, getTourPackageController, listTourPackagesController, searchTourPackagesController, deleteTourPackageController } from './controller/tourPackage.controller.js';
 // ...existing code...
 
 // Tour package management endpoints
@@ -77,6 +79,9 @@ app.patch('/api/admin/packages/:packageId/active', setTourPackageActiveControlle
 app.get('/api/admin/packages/:packageId', getTourPackageController); // Get package by ID
 app.get('/api/admin/packages', listTourPackagesController); // List packages
 app.delete('/api/admin/packages/:packageId', deleteTourPackageController); // Delete package
+
+// Customer-facing package search/filter endpoint
+app.get('/api/packages/search', searchTourPackagesController); // Search and filter packages for customers
 
 
 import { createGroupDepartureController, updateGroupDepartureController, listGroupDeparturesController, getGroupDepartureByIdController, deleteGroupDepartureController, setGroupDepartureStatusController } from './controller/groupDeparture.controller.js';
@@ -109,16 +114,68 @@ app.post('/api/admin/group-departures/:departureId/operators', addOperatorToDepa
 app.delete('/api/admin/group-departures/:departureId/operators/:operatorId', removeOperatorFromDepartureController);
 
 // Seat map endpoints for group departures
-import { getSeatMapController, updateSeatMapController } from './controller/groupDeparture.controller.js';
+import { getSeatMapController, updateSeatMapController, checkDepartureAvailabilityController, getAvailableDeparturesForPackageController } from './controller/groupDeparture.controller.js';
 app.get('/api/group-departure/:departureId/seat-map', getSeatMapController);
 app.put('/api/group-departure/:departureId/seat-map', updateSeatMapController);
 
-// Contact form endpoint
-app.post('/api/contact', (req, res) => {
-  const { name, email, message } = req.body;
-  console.log('Contact form submission:', { name, email, message });
-  res.json({ success: true, message: 'Message received. We will contact you soon!' });
-});
+// Customer-facing departure availability endpoints
+app.get('/api/departures/:departureId/availability', checkDepartureAvailabilityController); // Check single departure availability
+app.get('/api/packages/:packageId/departures/available', getAvailableDeparturesForPackageController); // Get all available departures for package
+
+// Booking endpoints (customer)
+import {
+  createBookingController,
+  getBookingByIdController,
+  listBookingsController,
+  updateBookingController,
+  cancelBookingController,
+  addPaymentController,
+  getCustomerStatsController,
+  completeBookingController
+} from './controller/booking.controller.js';
+app.post('/api/bookings', createBookingController); // Create booking
+app.get('/api/bookings/:bookingId', getBookingByIdController); // Get booking by ID
+app.get('/api/bookings', listBookingsController); // List bookings with filters
+app.put('/api/bookings/:bookingId', updateBookingController); // Update booking
+app.post('/api/bookings/:bookingId/cancel', cancelBookingController); // Cancel booking
+app.post('/api/bookings/:bookingId/payment', addPaymentController); // Add payment
+app.get('/api/customers/:customerId/stats', getCustomerStatsController); // Customer stats
+app.post('/api/bookings/:bookingId/complete', completeBookingController); // Mark booking complete
+
+// Review endpoints (customer)
+import {
+  createReviewController,
+  getReviewByIdController,
+  listReviewsController,
+  updateReviewController,
+  deleteReviewController,
+  moderateReviewController,
+  markReviewHelpfulController,
+  getPackageRatingStatsController,
+  getCustomerReviewForPackageController
+} from './controller/review.controller.js';
+app.post('/api/reviews', createReviewController); // Create review
+app.get('/api/reviews/:reviewId', getReviewByIdController); // Get review by ID
+app.get('/api/reviews', listReviewsController); // List reviews with filters
+app.put('/api/reviews/:reviewId', updateReviewController); // Update review
+app.delete('/api/reviews/:reviewId', deleteReviewController); // Delete review
+app.patch('/api/reviews/:reviewId/moderate', moderateReviewController); // Moderate review (admin)
+app.post('/api/reviews/:reviewId/helpful', markReviewHelpfulController); // Mark review helpful
+app.get('/api/packages/:packageId/rating-stats', getPackageRatingStatsController); // Package rating stats
+app.get('/api/customers/:customerId/packages/:packageId/review', getCustomerReviewForPackageController); // Customer's review for package
+
+// Statistics endpoints
+import { getPlatformStatsController, getBookingStatsController } from './controller/stats.controller.js';
+import { createContactController, listContactsController, getContactController, markContactHandledController } from './controller/contact.controller.js';
+app.get('/api/stats/platform', getPlatformStatsController); // Get overall platform stats
+app.get('/api/stats/bookings', getBookingStatsController); // Get booking statistics
+
+// Contact form endpoint (store submissions)
+app.post('/api/contact', createContactController);
+// Admin: list and manage contact messages
+app.get('/api/admin/contacts', requireRole(ROLES.ADMIN), listContactsController);
+app.get('/api/admin/contacts/:id', requireRole(ROLES.ADMIN), getContactController);
+app.post('/api/admin/contacts/:id/handled', requireRole(ROLES.ADMIN), markContactHandledController);
 
 // Newsletter subscription
 app.post('/api/newsletter', (req, res) => {
@@ -129,6 +186,11 @@ app.post('/api/newsletter', (req, res) => {
 
 // Get all users (for testing/demo only)
 app.get('/api/users', getAllUsersController);
+
+// User saved packages endpoints
+app.get('/api/users/:userId/saved', getSavedPackagesController);
+app.post('/api/users/:userId/save/:packageId', savePackageController);
+app.delete('/api/users/:userId/save/:packageId', unsavePackageController);
 
 app.listen(PORT, () => {
   console.log(`🌸 TripBloom server running on port ${PORT}`);
@@ -161,12 +223,74 @@ app.get('/api/packages', (req, res) => {
 });
 
 
-// Reviews (mock data)
-app.get('/api/reviews', (req, res) => {
-    const reviews = [
-      { id: 1, name: 'Sarah Johnson', rating: 5, comment: 'TripBloom made our family trip stress-free and amazing!', avatar: 'avatar1.jpg' },
-      { id: 2, name: 'Mike Chen', rating: 5, comment: 'Best tour booking experience ever. Highly recommended!', avatar: 'avatar2.jpg' },
-      { id: 3, name: 'Emily Rodriguez', rating: 4, comment: 'Great service and wonderful destinations. Will book again!', avatar: 'avatar3.jpg' },
-    ];
+// Reviews endpoints
+app.get('/api/reviews', async (req, res) => {
+  try {
+    const reviews = await Review.find({ status: 'APPROVED' })
+      .populate('customerId', 'fullName email')
+      .populate('packageId', 'title')
+      .sort({ createdAt: -1 })
+      .limit(20);
+    
+    const formattedReviews = reviews.map(review => ({
+      id: review._id,
+      name: review.customerId?.fullName || 'Anonymous',
+      rating: review.rating,
+      comment: review.comment,
+      avatar: `https://randomuser.me/api/portraits/${Math.random() > 0.5 ? 'men' : 'women'}/${Math.floor(Math.random() * 99) + 1}.jpg`,
+      packageName: review.packageId?.title,
+      verified: review.verified,
+      createdAt: review.createdAt
+    }));
+    
+    res.json(formattedReviews);
+  } catch (error) {
+    console.error('Error fetching reviews:', error);
+    res.status(500).json({ error: 'Failed to fetch reviews' });
+  }
+});
+
+app.get('/api/reviews/package/:packageId', async (req, res) => {
+  try {
+    const { packageId } = req.params;
+    const reviews = await Review.find({ 
+      packageId, 
+      status: 'APPROVED' 
+    })
+      .populate('customerId', 'fullName')
+      .sort({ createdAt: -1 });
+    
     res.json(reviews);
-  });
+  } catch (error) {
+    console.error('Error fetching package reviews:', error);
+    res.status(500).json({ error: 'Failed to fetch package reviews' });
+  }
+});
+
+// Statistics endpoint for landing page
+app.get('/api/stats', async (req, res) => {
+  try {
+    const [totalPackages, totalUsers, totalReviews] = await Promise.all([
+      TourPackage.countDocuments({ isActive: true }),
+      User.countDocuments({ role: 'CUSTOMER' }),
+      Review.countDocuments({ status: 'APPROVED' })
+    ]);
+    
+    res.json({
+      success: true,
+      stats: {
+        packages: totalPackages,
+        customers: totalUsers,
+        reviews: totalReviews,
+        destinations: 50 // Can be calculated from package destinations
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch statistics',
+      stats: { packages: 0, customers: 0, reviews: 0, destinations: 0 }
+    });
+  }
+});

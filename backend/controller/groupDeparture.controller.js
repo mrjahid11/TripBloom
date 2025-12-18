@@ -5,7 +5,9 @@ import {
   listGroupDepartures,
   getGroupDepartureById,
   deleteGroupDeparture,
-  setGroupDepartureStatus
+  setGroupDepartureStatus,
+  checkDepartureAvailability,
+  getAvailableDeparturesForPackage
 } from '../service/groupDeparture.service.js';
 import {
   assignOperatorsToDeparture,
@@ -166,4 +168,43 @@ export async function updateSeatMapController(req, res) {
     return res.status(400).json({ success: false, message: result.error });
   }
   res.json({ success: true, message: 'Seat map updated successfully.', seatMap: result.departure.seatMap });
+}
+
+// Check departure availability (customer-facing)
+export async function checkDepartureAvailabilityController(req, res) {
+  const { departureId } = req.params;
+
+  const result = await checkDepartureAvailability(departureId);
+
+  if (result.error) {
+    return res.status(404).json({
+      success: false,
+      message: result.error
+    });
+  }
+
+  res.json({
+    success: true,
+    availability: result.availability
+  });
+}
+
+// Get available departures for a package (customer-facing)
+export async function getAvailableDeparturesForPackageController(req, res) {
+  const { packageId } = req.params;
+
+  const result = await getAvailableDeparturesForPackage(packageId);
+
+  if (result.error) {
+    return res.status(500).json({
+      success: false,
+      message: result.error
+    });
+  }
+
+  res.json({
+    success: true,
+    departures: result.departures,
+    count: result.departures.length
+  });
 }

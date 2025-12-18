@@ -90,6 +90,80 @@ export async function deleteGroupDeparture({ departureId }) {
   return { success: true };
 }
 
+// Check availability for a group departure (customer-facing)
+export async function checkDepartureAvailability(departureId) {
+  try {
+    const departure = await GroupDeparture.findById(departureId)
+      .populate('packageId', 'title destination type basePrice');
+
+    if (!departure) {
+      return { error: 'Departure not found' };
+    }
+
+    const availableSeats = departure.totalSeats - departure.bookedSeats;
+    const isAvailable = departure.status === 'OPEN' && availableSeats > 0;
+
+    return {
+      availability: {
+        departureId: departure._id,
+        packageId: departure.packageId?._id,
+        packageTitle: departure.packageId?.title,
+        startDate: departure.startDate,
+        endDate: departure.endDate,
+        totalSeats: departure.totalSeats,
+        bookedSeats: departure.bookedSeats,
+        availableSeats,
+        pricePerPerson: departure.pricePerPerson,
+        status: departure.status,
+        isAvailable,
+        message: !isAvailable
+          ? departure.status === 'CANCELLED'
+            ? 'This departure has been cancelled'
+            : departure.status === 'FULL'
+            ? 'This departure is fully booked'
+            : 'This departure is not available for booking'
+          : `${availableSeats} seat(s) available`
+      }
+    };
+  } catch (err) {
+    console.error('Error checking departure availability:', err);
+    return { error: 'Failed to check availability' };
+  }
+}
+
+// Get available departures for a package (customer-facing)
+export async function getAvailableDeparturesForPackage(packageId) {
+  try {
+    const now = new Date();
+
+    const departures = await GroupDeparture.find({
+      packageId,
+      status: 'OPEN',
+      startDate: { $gte: now } // Only future departures
+    })
+      .populate('packageId', 'title destination type basePrice')
+      .sort({ startDate: 1 });
+
+    const availableDepartures = departures
+      .filter(dep => dep.bookedSeats < dep.totalSeats)
+      .map(dep => ({
+        departureId: dep._id,
+        startDate: dep.startDate,
+        endDate: dep.endDate,
+        totalSeats: dep.totalSeats,
+        bookedSeats: dep.bookedSeats,
+        availableSeats: dep.totalSeats - dep.bookedSeats,
+        pricePerPerson: dep.pricePerPerson,
+        status: dep.status
+      }));
+
+    return { departures: availableDepartures };
+  } catch (err) {
+    console.error('Error fetching available departures:', err);
+    return { error: 'Failed to fetch available departures' };
+  }
+}
+
 
 
 // Close booking / mark full / cancel departure

@@ -161,3 +161,70 @@
 html {
   scroll-behavior: smooth;
 }
+/* Custom Scrollbar Styles */
+/* For Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: linear-gradient(to bottom, #f1f5f9 0%, #e2e8f0 100%);
+  border-radius: 10px;
+  margin: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
+  border-radius: 10px;
+  border: 2px solid #f1f5f9;
+  transition: all 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 50%, #065f46 100%);
+  border-color: #e2e8f0;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-track {
+  background: linear-gradient(to bottom, #1f2937 0%, #111827 100%);
+  border-radius: 10px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
+  border: 2px solid #1f2937;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%);
+  border-color: #111827;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #10b981 #f1f5f9;
+}
+
+.dark * {
+  scrollbar-color: #10b981 #1f2937;
+}
+
+/* Contact focus highlight animation */
+.contact-focus {
+  animation: contactFocusAnim 2.5s ease;
+}
+
+@keyframes contactFocusAnim {
+  0% { box-shadow: 0 0 0 6px rgba(59,130,246,0.35); }
+  40% { background-color: rgba(59,130,246,0.06); }
+  100% { box-shadow: none; background-color: transparent; }
+}

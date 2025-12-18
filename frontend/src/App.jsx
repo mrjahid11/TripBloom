@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import TourPackagesManager from './components/TourPackagesManager';
 import UsersManager from './components/UsersManager';
 import Hero from './components/Hero';
+import Stats from './components/Stats';
 import HowItWorks from './components/HowItWorks';
 import PopularDestinations from './components/PopularDestinations';
 import TourCategories from './components/TourCategories';
@@ -16,20 +17,24 @@ import Contact from './components/Contact';
 import Footer from './components/Footer';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLayout from './components/AdminLayout';
+import AdminContacts from './components/AdminContacts';
 import CustomerDashboard from './components/CustomerDashboard';
 import OperatorDashboard from './components/OperatorDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import GroupDeparturesManager from './components/GroupDeparturesManager';
 import OperatorsManager from './components/OperatorsManager';
+import MyReviews from './components/MyReviews';
+import BrowsePackages from './components/BrowsePackages';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={
-          <div className="App bg-white dark:bg-gray-900 transition-colors duration-300">
+          <div className="App bg-gradient-to-br from-green-50 via-blue-100 to-emerald-100 dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors duration-300">
             <Navbar />
             <Hero />
+            <Stats />
             <HowItWorks />
             <PopularDestinations />
             <TourCategories />
@@ -45,6 +50,7 @@ function App() {
           </ProtectedRoute>
         }>
           <Route index element={<AdminDashboard />} />
+          <Route path="contacts" element={<AdminContacts />} />
           <Route path="departures" element={<GroupDeparturesManager />} />
           <Route path="operators" element={<OperatorsManager />} />
           <Route path="packages" element={<TourPackagesManager />} />
@@ -58,11 +64,18 @@ function App() {
             <CustomerDashboard />
           </ProtectedRoute>
         } />
+        <Route path="/customer/reviews" element={
+          <ProtectedRoute role="customer">
+            <MyReviews />
+          </ProtectedRoute>
+        } />
         <Route path="/operator" element={
           <ProtectedRoute role="operator">
             <OperatorDashboard />
           </ProtectedRoute>
         } />
+        <Route path="/packages" element={<BrowsePackages />} />
+        <Route path="/browse-packages" element={<BrowsePackages />} />
       </Routes>
     </BrowserRouter>
   );
