@@ -6,6 +6,8 @@ const BookingDetailModal = ({ booking, onClose, onUpdate }) => {
   const [showPayment, setShowPayment] = useState(false);
   const [showInvoice, setShowInvoice] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [showCancelOptions, setShowCancelOptions] = useState(false);
+  const [requestingDateChange, setRequestingDateChange] = useState(false);
 
   const handlePaymentSuccess = (res) => {
     if (res && res.success && res.booking) {
@@ -104,6 +106,55 @@ const BookingDetailModal = ({ booking, onClose, onUpdate }) => {
     }
   };
 
+  const handleDateChangeRequest = async () => {
+    const newDate = prompt('Please enter your preferred new start date (YYYY-MM-DD):');
+    if (!newDate) return;
+
+    const reason = prompt('Please provide a reason for date change request:') || 'Customer requested date change';
+    const userId = localStorage.getItem('userId');
+    
+    if (!userId) {
+      alert('User not logged in');
+      return;
+    }
+
+    setRequestingDateChange(true);
+    try {
+      const res = await fetch(`/api/bookings/${booking._id || booking.id}/request-date-change`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId, 
+          requestedDate: newDate, 
+          reason,
+          currentStartDate: booking.startDate
+        })
+      });
+
+      const data = await res.json();
+      
+      if (data.success) {
+        alert('Date change request submitted successfully!\n\nYour request will be reviewed by our team and you will be notified within 24-48 hours.');
+        if (data.booking) {
+          onUpdate(data.booking);
+        }
+        setShowCancelOptions(false);
+      } else {
+        alert(data.message || 'Failed to submit date change request');
+      }
+    } catch (err) {
+      console.error('Date change request error:', err);
+      alert('Failed to submit request. Please try again.');
+    } finally {
+      setRequestingDateChange(false);
+    }
+  };
+
+  const handleCancelWithRefund = async () => {
+    setShowCancelOptions(false);
+    await handleCancelTour();
+  };
+
   const paidAmount = (booking.payments || []).filter(p => (p.status === 'SUCCESS' || p.status === 'Success')).reduce((s, p) => s + (p.amount || 0), 0);
   const totalAmount = booking.totalAmount || booking.amount || 0;
   const isFullyPaid = paidAmount >= totalAmount && totalAmount > 0;
@@ -171,7 +222,7 @@ const BookingDetailModal = ({ booking, onClose, onUpdate }) => {
         </div>
 
         <div className="mt-6 flex space-x-3">
-          {booking.status !== 'CANCELLED' && (
+          {booking.status !== 'CANCELLED' && booking.status !== 'REFUNDED' && (
             <button 
               onClick={() => setShowInvoice(true)} 
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -179,25 +230,27 @@ const BookingDetailModal = ({ booking, onClose, onUpdate }) => {
               View Invoice
             </button>
           )}
-          {booking.status !== 'CANCELLED' && !isFullyPaid && !bookingConfirmed && (
+          {booking.status !== 'CANCELLED' && booking.status !== 'REFUNDED' && !isFullyPaid && !bookingConfirmed && (
             <button onClick={() => setShowPayment(true)} className="px-4 py-2 bg-primary text-white rounded-lg">Add Payment</button>
           )}
-          {isFullyPaid && (
+          {isFullyPaid && booking.status !== 'CANCELLED' && booking.status !== 'REFUNDED' && (
             <div className="px-4 py-2 rounded-lg bg-green-50 text-green-700 font-semibold">Paid in full</div>
           )}
-          {bookingConfirmed && !isFullyPaid && (
+          {bookingConfirmed && !isFullyPaid && booking.status !== 'CANCELLED' && booking.status !== 'REFUNDED' && (
             <div className="px-4 py-2 rounded-lg bg-yellow-50 text-yellow-700 font-semibold">Booking {booking.status}</div>
           )}
-          {booking.status === 'CANCELLED' && (
-            <div className="px-4 py-2 rounded-lg bg-red-50 text-red-700 font-semibold">Booking Cancelled</div>
+          {(booking.status === 'CANCELLED' || booking.status === 'REFUNDED') && (
+            <div className="px-4 py-2 rounded-lg bg-red-50 text-red-700 font-semibold">
+              {booking.status === 'REFUNDED' ? 'Booking Cancelled - Refunded' : 'Booking Cancelled'}
+            </div>
           )}
-          {booking.status !== 'CANCELLED' && booking.status !== 'COMPLETED' && (
+          {booking.status !== 'CANCELLED' && booking.status !== 'REFUNDED' && booking.status !== 'COMPLETED' && (
             <button 
-              onClick={handleCancelTour} 
+              onClick={() => setShowCancelOptions(true)} 
               disabled={cancelling}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              {cancelling ? 'Cancelling...' : 'Cancel Tour'}
+              Cancel Booking
             </button>
           )}
         </div>
@@ -221,6 +274,74 @@ const BookingDetailModal = ({ booking, onClose, onUpdate }) => {
 
         <Invoice isOpen={showInvoice} onClose={() => setShowInvoice(false)} booking={booking} />
       </div>
+
+      {/* Cancellation Options Modal */}
+      {showCancelOptions && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70">
+          <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Cancellation Options</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              We understand plans can change. Please choose how you'd like to proceed:
+            </p>
+
+            <div className="space-y-4">
+              {/* Option 1: Cancel with Refund */}
+              <button
+                onClick={handleCancelWithRefund}
+                disabled={cancelling}
+                className="w-full p-4 border-2 border-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-start">
+                  <div className="flex-shrink-0 text-red-500 text-2xl mr-3">💰</div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-gray-900 dark:text-white mb-1">
+                      {cancelling ? 'Processing...' : 'Cancel with Refund'}
+                    </h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Cancel your booking and receive a refund based on our cancellation policy.
+                      Refund amount depends on how far in advance you cancel.
+                    </p>
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-2 font-semibold">
+                      ⚠️ This action cannot be undone
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              {/* Option 2: Request Date Change */}
+              <button
+                onClick={handleDateChangeRequest}
+                disabled={requestingDateChange}
+                className="w-full p-4 border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-start">
+                  <div className="flex-shrink-0 text-blue-500 text-2xl mr-3">📅</div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-gray-900 dark:text-white mb-1">
+                      {requestingDateChange ? 'Submitting...' : 'Request Date Change'}
+                    </h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Keep your booking and request to change your travel dates.
+                      Subject to availability and approval.
+                    </p>
+                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-semibold">
+                      ✓ No cancellation fees
+                    </p>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* Cancel Button */}
+            <button
+              onClick={() => setShowCancelOptions(false)}
+              className="w-full mt-4 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

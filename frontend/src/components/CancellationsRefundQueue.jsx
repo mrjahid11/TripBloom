@@ -26,27 +26,37 @@ const CancellationsRefundQueue = () => {
       const bookingsRes = await axios.get('/api/bookings').catch(() => ({ data: { bookings: [] } }));
       const allBookings = bookingsRes.data.bookings || [];
 
-      // Filter cancelled bookings and create refund records
-      const cancelledBookings = allBookings.filter(booking => 
-        booking.status === 'CANCELLED' || 
-        booking.cancellation?.isCancelled
-      );
+      // Filter cancelled bookings where customer actually paid money
+      // Include both pending and already processed refunds for tracking
+      const cancelledBookings = allBookings.filter(booking => {
+        const hasCancellation = booking.status === 'CANCELLED' || booking.status === 'REFUNDED' || booking.cancellation?.isCancelled;
+        if (!hasCancellation) return false;
+        
+        // Calculate total paid amount
+        const totalPaid = (booking.payments || [])
+          .filter(p => p.status === 'SUCCESS' || p.status === 'CONFIRMED')
+          .reduce((sum, p) => sum + (p.amount || 0), 0);
+        
+        // Only show if customer actually paid money
+        return totalPaid > 0;
+      });
 
       // Fetch additional data for each cancelled booking
       const refundsWithData = await Promise.all(
         cancelledBookings.map(async (booking) => {
           try {
-            // Mock data for demonstration
-            const refundAmount = booking.cancellation?.refundAmount || (booking.totalAmount * 0.8); // 80% refund policy
-            const refundedSoFar = booking.cancellation?.refundAmount || 0;
-            const isPartialRefund = refundedSoFar > 0 && refundedSoFar < booking.totalAmount;
+            // Calculate total paid
+            const totalPaid = (booking.payments || [])
+              .filter(p => p.status === 'SUCCESS' || p.status === 'CONFIRMED')
+              .reduce((sum, p) => sum + (p.amount || 0), 0);
+            
+            const refundAmount = booking.cancellation?.refundAmount || 0;
+            const isRefundProcessed = booking.status === 'REFUNDED' || booking.cancellation?.refundProcessed;
             
             // Determine refund status
             let refundStatus = 'PENDING_REFUND';
-            if (refundedSoFar >= refundAmount) {
+            if (isRefundProcessed) {
               refundStatus = 'REFUNDED';
-            } else if (refundedSoFar > 0) {
-              refundStatus = 'PARTIAL_REFUND';
             }
 
             // Determine initiator (customer vs admin)
@@ -74,11 +84,10 @@ const CancellationsRefundQueue = () => {
 
             return {
               ...booking,
+              totalPaid,
               refundAmount,
-              refundedSoFar,
               refundStatus,
               initiator,
-              isPartialRefund,
               isDepartureCancelled,
               cancellationReason: reason,
               requestedDate: booking.cancellation?.cancelledAt || booking.updatedAt,
@@ -187,23 +196,31 @@ const CancellationsRefundQueue = () => {
 
   const processRefund = async (bookingId, amount) => {
     try {
-      // API call to process refund
-      // await axios.post(`/api/bookings/${bookingId}/refund`, { amount });
+      // Call backend API to process refund
+      const adminId = localStorage.getItem('userId');
+      const res = await axios.post(`/api/admin/bookings/${bookingId}/refund`, { adminId });
       
-      // Update local state
-      setRefunds(refunds.map(r => {
-        if (r._id === bookingId) {
-          const newRefundedSoFar = r.refundedSoFar + amount;
-          return {
-            ...r,
-            refundedSoFar: newRefundedSoFar,
-            refundStatus: newRefundedSoFar >= r.refundAmount ? 'REFUNDED' : 'PARTIAL_REFUND'
-          };
-        }
-        return r;
-      }));
+      if (res.data.success) {
+        // Update the refund status to REFUNDED instead of removing
+        setRefunds(refunds.map(r => {
+          if (r._id === bookingId) {
+            return {
+              ...r,
+              refundStatus: 'REFUNDED',
+              status: 'REFUNDED'
+            };
+          }
+          return r;
+        }));
+        
+        // Refresh to get updated data from backend
+        fetchRefunds();
+        
+        alert(`Refund processed successfully! $${res.data.refundAmount} refunded to ${res.data.booking.customerId.fullName}`);
+      }
     } catch (err) {
       console.error('Failed to process refund:', err);
+      alert('Failed to process refund: ' + (err.response?.data?.message || err.message));
     }
   };
 

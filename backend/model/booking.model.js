@@ -26,7 +26,7 @@ const paymentSchema = new mongoose.Schema({
   method: {
     type: String,
     required: true,
-    enum: ['BKASH', 'NAGAD', 'ROCKET', 'CARD', 'BANK_TRANSFER', 'CASH'],
+    enum: ['BKASH', 'NAGAD', 'ROCKET', 'CARD', 'BANK_TRANSFER', 'CASH', 'REFUND'],
     uppercase: true
   },
   status: {
@@ -65,6 +65,53 @@ const cancellationSchema = new mongoose.Schema({
     type: Number,
     default: 0,
     min: 0
+  },
+  refundProcessed: {
+    type: Boolean,
+    default: false
+  },
+  refundProcessedAt: {
+    type: Date
+  },
+  refundProcessedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }
+}, { _id: false });
+
+const dateChangeRequestSchema = new mongoose.Schema({
+  requestedDate: {
+    type: Date,
+    required: true
+  },
+  reason: {
+    type: String,
+    trim: true
+  },
+  requestedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  requestedAt: {
+    type: Date,
+    default: Date.now
+  },
+  status: {
+    type: String,
+    enum: ['PENDING', 'APPROVED', 'REJECTED'],
+    default: 'PENDING'
+  },
+  reviewedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  reviewedAt: {
+    type: Date
+  },
+  reviewNotes: {
+    type: String,
+    trim: true
   }
 }, { _id: false });
 
@@ -161,6 +208,10 @@ const bookingSchema = new mongoose.Schema({
   cancellation: {
     type: cancellationSchema,
     default: () => ({})
+  },
+  dateChangeRequest: {
+    type: dateChangeRequestSchema,
+    default: null
   },
   reservedSeats: {
     type: [String],

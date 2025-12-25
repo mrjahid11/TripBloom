@@ -8,7 +8,11 @@ import {
   addPayment,
   getCustomerBookingStats,
   completeBooking,
-  cancelUnpaidExpiredBookings
+  cancelUnpaidExpiredBookings,
+  processRefund,
+  requestDateChange,
+  approveDateChange,
+  rejectDateChange
 } from '../service/booking.service.js';
 
 // Create a new booking
@@ -256,6 +260,116 @@ export async function cancelUnpaidBookingsController(req, res) {
       success: true, 
       message: `${result.cancelledCount} unpaid booking(s) cancelled.`,
       cancelledBookings: result.bookings
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
+
+// Process refund for a cancelled booking (Admin only)
+export async function processRefundController(req, res) {
+  try {
+    const { bookingId } = req.params;
+    const adminId = req.body.adminId || req.user?._id; // Get from auth middleware or body
+
+    const result = await processRefund({ bookingId, adminId });
+
+    if (result.error) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    res.json({
+      success: true,
+      message: `Refund of $${result.refundAmount} processed for ${result.customer.fullName}`,
+      booking: result.booking,
+      refundAmount: result.refundAmount
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
+
+// Request date change for a booking
+export async function requestDateChangeController(req, res) {
+  try {
+    const { bookingId } = req.params;
+    const { userId, requestedDate, reason } = req.body;
+
+    if (!userId || !requestedDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: userId and requestedDate'
+      });
+    }
+
+    const result = await requestDateChange({ bookingId, userId, requestedDate, reason });
+
+    if (result.error) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    res.json({
+      success: true,
+      message: result.message,
+      booking: result.booking
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
+
+// Approve date change request (Admin)
+export async function approveDateChangeController(req, res) {
+  try {
+    const { bookingId } = req.params;
+    const { adminId, newStartDate } = req.body;
+
+    if (!adminId || !newStartDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: adminId and newStartDate'
+      });
+    }
+
+    const result = await approveDateChange({ bookingId, adminId, newStartDate });
+
+    if (result.error) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    res.json({
+      success: true,
+      message: result.message,
+      booking: result.booking
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
+
+// Reject date change request (Admin)
+export async function rejectDateChangeController(req, res) {
+  try {
+    const { bookingId } = req.params;
+    const { adminId, reviewNotes } = req.body;
+
+    if (!adminId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: adminId'
+      });
+    }
+
+    const result = await rejectDateChange({ bookingId, adminId, reviewNotes });
+
+    if (result.error) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    res.json({
+      success: true,
+      message: result.message,
+      booking: result.booking
     });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Server error', error: err.message });

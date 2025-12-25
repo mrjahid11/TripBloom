@@ -64,7 +64,8 @@ const Bookings = () => {
     const cancelled = [];
 
     bookings.forEach(b => {
-      if (b.status === 'CANCELLED') {
+      // Both CANCELLED and REFUNDED bookings go to cancelled section
+      if (b.status === 'CANCELLED' || b.status === 'REFUNDED') {
         cancelled.push(b);
       } else {
         const paymentInfo = checkPaymentStatus(b);
@@ -81,8 +82,14 @@ const Bookings = () => {
 
   const renderBookingCard = (b) => {
     const paymentInfo = checkPaymentStatus(b);
-    const showWarning = b.status !== 'CANCELLED' && !paymentInfo.isPaid && paymentInfo.daysUntilStart !== null && paymentInfo.daysUntilStart <= 7 && paymentInfo.daysUntilStart >= 0;
-    const isCancelledDueToNonPayment = b.status === 'CANCELLED' && b.cancellation?.reason?.includes('payment');
+    const isCancelledOrRefunded = b.status === 'CANCELLED' || b.status === 'REFUNDED';
+    const showWarning = !isCancelledOrRefunded && !paymentInfo.isPaid && paymentInfo.daysUntilStart !== null && paymentInfo.daysUntilStart <= 7 && paymentInfo.daysUntilStart >= 0;
+    const isCancelledDueToNonPayment = isCancelledOrRefunded && b.cancellation?.reason?.includes('payment');
+    
+    // Only show refund info if payment was made
+    const hasPayments = paymentInfo.totalPaid > 0;
+    const hasRefund = isCancelledOrRefunded && hasPayments && b.cancellation?.refundAmount > 0;
+    const isRefundProcessed = b.status === 'REFUNDED' || b.cancellation?.refundProcessed;
     
     return (
       <div key={b._id || b.id} className={`bg-white dark:bg-gray-800 p-4 rounded-xl shadow ${showWarning ? 'border-2 border-red-500' : ''}`}>
@@ -112,6 +119,44 @@ const Bookings = () => {
               <div>
                 <p className="font-semibold text-red-900">Booking Cancelled</p>
                 <p className="text-sm text-red-800">{b.cancellation?.reason || 'Cancelled due to non-payment'}</p>
+                <p className="text-xs text-red-700 mt-1">No refund applicable (payment not completed)</p>
+              </div>
+            </div>
+          </div>
+        )}
+        {!isCancelledDueToNonPayment && isCancelledOrRefunded && !hasPayments && (
+          <div className="bg-gray-100 border-l-4 border-gray-500 p-3 mb-3 rounded">
+            <div className="flex items-start">
+              <span className="text-gray-600 text-xl mr-2">✕</span>
+              <div>
+                <p className="font-semibold text-gray-900">Booking Cancelled</p>
+                <p className="text-sm text-gray-700">{b.cancellation?.reason || 'Booking was cancelled'}</p>
+                <p className="text-xs text-gray-600 mt-1">No refund applicable (no payment made)</p>
+              </div>
+            </div>
+          </div>
+        )}
+        {hasRefund && (
+          <div className={`${isRefundProcessed ? 'bg-green-50 border-green-500' : 'bg-yellow-50 border-yellow-500'} border-l-4 p-3 mb-3 rounded`}>
+            <div className="flex items-start">
+              <span className={`${isRefundProcessed ? 'text-green-600' : 'text-yellow-600'} text-xl mr-2`}>
+                {isRefundProcessed ? '💰' : '⏳'}
+              </span>
+              <div>
+                <p className={`font-semibold ${isRefundProcessed ? 'text-green-900' : 'text-yellow-900'}`}>
+                  {isRefundProcessed ? 'Refund Processed' : 'Refund Pending'}
+                </p>
+                <p className={`text-sm ${isRefundProcessed ? 'text-green-800' : 'text-yellow-800'}`}>
+                  {isRefundProcessed 
+                    ? `${b.currency || 'BDT'} ${b.cancellation.refundAmount} has been refunded to your account.`
+                    : `${b.currency || 'BDT'} ${b.cancellation.refundAmount} will be refunded soon.`
+                  }
+                </p>
+                {isRefundProcessed && b.cancellation.refundProcessedAt && (
+                  <p className="text-xs text-green-700 mt-1">
+                    Processed on: {new Date(b.cancellation.refundProcessedAt).toLocaleDateString()}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -125,6 +170,7 @@ const Bookings = () => {
             <p className="font-bold text-primary">{b.currency || '$'}{b.totalAmount || b.amount || 0}</p>
             <p className={`mt-1 text-sm font-semibold ${
               b.status === 'CONFIRMED' || b.status === 'Confirmed' ? 'text-green-600' : 
+              b.status === 'REFUNDED' ? 'text-blue-600' :
               b.status === 'CANCELLED' ? 'text-red-600' : 'text-yellow-600'
             }`}>{b.status || 'Pending'}</p>
             {b.payments && b.payments.length > 0 && (

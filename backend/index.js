@@ -138,17 +138,25 @@ import {
   addPaymentController,
   getCustomerStatsController,
   completeBookingController,
-  cancelUnpaidBookingsController
+  cancelUnpaidBookingsController,
+  processRefundController,
+  requestDateChangeController,
+  approveDateChangeController,
+  rejectDateChangeController
 } from './controller/booking.controller.js';
 app.post('/api/bookings', createBookingController); // Create booking
 app.get('/api/bookings/:bookingId', getBookingByIdController); // Get booking by ID
 app.get('/api/bookings', listBookingsController); // List bookings with filters
 app.put('/api/bookings/:bookingId', updateBookingController); // Update booking
 app.post('/api/bookings/:bookingId/cancel', cancelBookingController); // Cancel booking
+app.post('/api/bookings/:bookingId/request-date-change', requestDateChangeController); // Request date change
 app.post('/api/bookings/:bookingId/payment', addPaymentController); // Add payment
 app.get('/api/customers/:customerId/stats', getCustomerStatsController); // Customer stats
 app.post('/api/bookings/:bookingId/complete', completeBookingController); // Mark booking complete
 app.post('/api/admin/bookings/cancel-unpaid', cancelUnpaidBookingsController); // Cancel unpaid expired bookings
+app.post('/api/admin/bookings/:bookingId/refund', processRefundController); // Process refund (Admin)
+app.post('/api/admin/bookings/:bookingId/approve-date-change', approveDateChangeController); // Approve date change (Admin)
+app.post('/api/admin/bookings/:bookingId/reject-date-change', rejectDateChangeController); // Reject date change (Admin)
 
 // Review endpoints (customer)
 import {

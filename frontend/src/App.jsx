@@ -28,6 +28,7 @@ import BrowsePackages from './components/BrowsePackages';
 import ErrorBoundary from './components/ErrorBoundary';
 import CustomerHistory from './components/CustomerHistory';
 import CustomerProfile from './components/CustomerProfile';
+import DateChangeRequestsManager from './components/DateChangeRequestsManager';
 
 const router = createBrowserRouter(
   createRoutesFromElements(
@@ -58,6 +59,7 @@ const router = createBrowserRouter(
         <Route path="packages" element={<TourPackagesManager />} />
         <Route path="users" element={<UsersManager />} />
         <Route path="refunds" element={<RefundsManager />} />
+        <Route path="date-changes" element={<DateChangeRequestsManager />} />
         <Route path="reviews" element={<ReviewsManager />} />
         <Route path="settings" element={<SettingsManager />} />
       </Route>

@@ -314,8 +314,8 @@ export async function cancelBooking({ bookingId, userId, reason }) {
       return { error: 'Booking not found' };
     }
 
-    // Check if already cancelled
-    if (booking.status === 'CANCELLED' || booking.cancellation.isCancelled) {
+    // Check if already cancelled or refunded
+    if (booking.status === 'CANCELLED' || booking.status === 'REFUNDED' || booking.cancellation.isCancelled) {
       return { error: 'Booking is already cancelled' };
     }
 
@@ -363,6 +363,139 @@ export async function cancelBooking({ bookingId, userId, reason }) {
   }
 }
 
+// Request date change for a booking
+export async function requestDateChange({ bookingId, userId, requestedDate, reason }) {
+  try {
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return { error: 'Booking not found' };
+    }
+
+    // Check if already cancelled or refunded
+    if (booking.status === 'CANCELLED' || booking.status === 'REFUNDED') {
+      return { error: 'Cannot request date change for cancelled booking' };
+    }
+
+    // Check if booking is completed
+    if (booking.status === 'COMPLETED') {
+      return { error: 'Cannot request date change for completed booking' };
+    }
+
+    // Check if there's already a pending date change request
+    if (booking.dateChangeRequest && booking.dateChangeRequest.status === 'PENDING') {
+      return { error: 'There is already a pending date change request for this booking' };
+    }
+
+    // Validate the requested date
+    const newDate = new Date(requestedDate);
+    if (isNaN(newDate.getTime())) {
+      return { error: 'Invalid date format' };
+    }
+
+    if (newDate < new Date()) {
+      return { error: 'Requested date cannot be in the past' };
+    }
+
+    // Create date change request
+    booking.dateChangeRequest = {
+      requestedDate: newDate,
+      reason,
+      requestedBy: userId,
+      requestedAt: new Date(),
+      status: 'PENDING'
+    };
+
+    await booking.save();
+    await booking.populate('customerId', 'name email phone');
+    await booking.populate('packageId', 'title destination type category');
+
+    return { booking, message: 'Date change request submitted successfully' };
+  } catch (err) {
+    console.error('Error requesting date change:', err);
+    return { error: 'Failed to submit date change request' };
+  }
+}
+
+// Approve date change request (Admin)
+export async function approveDateChange({ bookingId, adminId, newStartDate }) {
+  try {
+    const booking = await Booking.findById(bookingId)
+      .populate('customerId', 'fullName email')
+      .populate('packageId', 'title defaultDays defaultNights');
+    
+    if (!booking) {
+      return { error: 'Booking not found' };
+    }
+
+    if (!booking.dateChangeRequest || booking.dateChangeRequest.status !== 'PENDING') {
+      return { error: 'No pending date change request found' };
+    }
+
+    // Update the booking dates
+    const oldStartDate = booking.startDate;
+    booking.startDate = new Date(newStartDate);
+    
+    // Calculate new end date based on package duration
+    if (booking.packageId) {
+      const durationDays = booking.packageId.defaultDays || 1;
+      const newEndDate = new Date(booking.startDate);
+      newEndDate.setDate(newEndDate.getDate() + durationDays);
+      booking.endDate = newEndDate;
+    }
+
+    // Update date change request status
+    booking.dateChangeRequest.status = 'APPROVED';
+    booking.dateChangeRequest.reviewedBy = adminId;
+    booking.dateChangeRequest.reviewedAt = new Date();
+    booking.dateChangeRequest.reviewNotes = `Date changed from ${oldStartDate.toDateString()} to ${booking.startDate.toDateString()}`;
+
+    await booking.save();
+
+    return { 
+      success: true, 
+      booking,
+      message: 'Date change request approved successfully'
+    };
+  } catch (err) {
+    console.error('Error approving date change:', err);
+    return { error: 'Failed to approve date change request' };
+  }
+}
+
+// Reject date change request (Admin)
+export async function rejectDateChange({ bookingId, adminId, reviewNotes }) {
+  try {
+    const booking = await Booking.findById(bookingId)
+      .populate('customerId', 'fullName email')
+      .populate('packageId', 'title');
+    
+    if (!booking) {
+      return { error: 'Booking not found' };
+    }
+
+    if (!booking.dateChangeRequest || booking.dateChangeRequest.status !== 'PENDING') {
+      return { error: 'No pending date change request found' };
+    }
+
+    // Update date change request status
+    booking.dateChangeRequest.status = 'REJECTED';
+    booking.dateChangeRequest.reviewedBy = adminId;
+    booking.dateChangeRequest.reviewedAt = new Date();
+    booking.dateChangeRequest.reviewNotes = reviewNotes || 'Request rejected by admin';
+
+    await booking.save();
+
+    return { 
+      success: true, 
+      booking,
+      message: 'Date change request rejected'
+    };
+  } catch (err) {
+    console.error('Error rejecting date change:', err);
+    return { error: 'Failed to reject date change request' };
+  }
+}
+
 // Calculate refund based on cancellation policy
 function calculateRefund(booking) {
   const now = new Date();
@@ -407,8 +540,8 @@ export async function addPayment({ bookingId, amount, method, transactionRef }) 
       return { error: 'Booking not found' };
     }
 
-    if (booking.status === 'CANCELLED') {
-      return { error: 'Cannot add payment to cancelled booking' };
+    if (booking.status === 'CANCELLED' || booking.status === 'REFUNDED') {
+      return { error: 'Cannot add payment to cancelled or refunded booking' };
     }
 
     const payment = {
@@ -501,3 +634,94 @@ export async function completeBooking(bookingId) {
     return { error: 'Failed to complete booking' };
   }
 }
+
+// Process refund for a cancelled booking
+export async function processRefund({ bookingId, adminId }) {
+  try {
+    const booking = await Booking.findById(bookingId)
+      .populate('customerId', 'fullName email')
+      .populate('packageId', 'title');
+    
+    if (!booking) {
+      return { error: 'Booking not found' };
+    }
+
+    if (booking.status !== 'CANCELLED' || !booking.cancellation.isCancelled) {
+      return { error: 'Booking is not cancelled' };
+    }
+
+    if (booking.cancellation.refundProcessed) {
+      return { error: 'Refund already processed' };
+    }
+
+    // Calculate total paid amount
+    const totalPaid = booking.payments
+      .filter(p => p.status === 'SUCCESS' || p.status === 'CONFIRMED')
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+    // Check if customer actually paid anything
+    if (totalPaid === 0) {
+      return { error: 'No refund applicable - customer did not make any payments' };
+    }
+
+    // Ensure finalAmount exists for old bookings
+    if (!booking.finalAmount) {
+      booking.finalAmount = booking.totalAmount;
+    }
+
+    // Calculate refund amount if not set or is 0
+    let refundAmount = booking.cancellation.refundAmount || 0;
+    if (refundAmount === 0) {
+      // Use refund policy calculation based on days until start
+      const now = new Date();
+      const startDate = new Date(booking.startDate);
+      const daysUntilStart = Math.ceil((startDate - now) / (1000 * 60 * 60 * 24));
+      
+      let refundPercentage = 0;
+      if (daysUntilStart > 30) {
+        refundPercentage = 1.0;
+      } else if (daysUntilStart >= 15) {
+        refundPercentage = 0.75;
+      } else if (daysUntilStart >= 7) {
+        refundPercentage = 0.50;
+      } else if (daysUntilStart >= 3) {
+        refundPercentage = 0.25;
+      } else if (daysUntilStart > 0) {
+        refundPercentage = 0.10;
+      }
+      
+      refundAmount = Math.round(totalPaid * refundPercentage);
+      
+      // Update the booking with calculated refund amount
+      booking.cancellation.refundAmount = refundAmount;
+    }
+
+    // Mark refund as processed
+    booking.cancellation.refundProcessed = true;
+    booking.cancellation.refundProcessedAt = new Date();
+    booking.cancellation.refundProcessedBy = adminId;
+    booking.status = 'REFUNDED';
+    
+    // Create refund payment record
+    booking.payments.push({
+      amount: refundAmount,
+      method: 'REFUND',
+      status: 'SUCCESS',
+      transactionRef: `REFUND-${booking._id}-${Date.now()}`,
+      paidAt: new Date()
+    });
+
+    await booking.save();
+
+    return { 
+      success: true,
+      booking,
+      refundAmount: refundAmount,
+      customer: booking.customerId
+    };
+  } catch (err) {
+    console.error('Error processing refund:', err);
+    return { error: 'Failed to process refund', details: err.message };
+  }
+}
+

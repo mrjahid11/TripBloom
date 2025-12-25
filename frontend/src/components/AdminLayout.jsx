@@ -4,7 +4,7 @@ import axios from 'axios';
 import ManageUsersMenu from './ManageUsersMenu';
 import { 
   FaUsers, FaRoute, FaChartLine, FaCog, FaSignOutAlt, FaBell, FaSearch, 
-  FaCalendar, FaDollarSign, FaStar, FaEnvelope
+  FaCalendar, FaDollarSign, FaStar, FaEnvelope, FaCalendarAlt
 } from 'react-icons/fa';
 
 const AdminLayout = () => {
@@ -15,15 +15,90 @@ const AdminLayout = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef(null);
 
+  const formatNotificationTime = (time) => {
+    const now = new Date();
+    const diff = Math.floor((now - time) / 1000); // seconds
+    
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+    
+    return time.toLocaleDateString();
+  };
+
   const fetchUnread = async () => {
     try {
       const role = localStorage.getItem('userRole') || '';
-      const res = await axios.get('/api/admin/contacts', { headers: { 'x-user-role': role } });
-      if (res.data && Array.isArray(res.data.contacts)) {
-        const unread = res.data.contacts.filter(c => !c.handled).slice(0,5);
-        setUnreadList(unread);
-        setUnreadCount(unread.length);
+      
+      // Fetch all notification sources in parallel
+      const [contactsRes, bookingsRes] = await Promise.all([
+        axios.get('/api/admin/contacts', { headers: { 'x-user-role': role } }).catch(() => ({ data: { contacts: [] } })),
+        axios.get('/api/bookings').catch(() => ({ data: { bookings: [] } }))
+      ]);
+      
+      const notifications = [];
+      
+      // Contact messages
+      if (contactsRes.data && Array.isArray(contactsRes.data.contacts)) {
+        const unreadContacts = contactsRes.data.contacts.filter(c => !c.handled);
+        unreadContacts.forEach(c => {
+          notifications.push({
+            id: `contact-${c._id}`,
+            type: 'contact',
+            icon: '📧',
+            title: c.name,
+            message: c.message,
+            time: new Date(c.createdAt),
+            action: () => navigate(`/admin/contacts?focus=${c._id}`)
+          });
+        });
       }
+      
+      // Date change requests
+      const allBookings = bookingsRes.data.bookings || [];
+      const pendingDateChanges = allBookings.filter(b => 
+        b.dateChangeRequest && b.dateChangeRequest.status === 'PENDING'
+      );
+      pendingDateChanges.forEach(b => {
+        notifications.push({
+          id: `datechange-${b._id}`,
+          type: 'datechange',
+          icon: '📅',
+          title: 'Date Change Request',
+          message: `${b.customerId?.fullName || 'Customer'} requested to change booking date`,
+          time: new Date(b.dateChangeRequest.requestedAt),
+          action: () => navigate('/admin/date-changes')
+        });
+      });
+      
+      // Refund requests (cancelled bookings with payments that haven't been refunded)
+      const pendingRefunds = allBookings.filter(b => {
+        const isCancelled = b.status === 'CANCELLED' || b.cancellation?.isCancelled;
+        const notRefunded = b.status !== 'REFUNDED' && !b.cancellation?.refundProcessed;
+        const hasPaid = (b.payments || [])
+          .filter(p => p.status === 'SUCCESS' || p.status === 'CONFIRMED')
+          .reduce((sum, p) => sum + (p.amount || 0), 0) > 0;
+        return isCancelled && notRefunded && hasPaid;
+      });
+      pendingRefunds.forEach(b => {
+        notifications.push({
+          id: `refund-${b._id}`,
+          type: 'refund',
+          icon: '💰',
+          title: 'Refund Request',
+          message: `${b.customerId?.fullName || 'Customer'} needs refund for cancelled booking`,
+          time: new Date(b.cancellation?.cancelledAt || b.updatedAt),
+          action: () => navigate('/admin/refunds')
+        });
+      });
+      
+      // Sort by time (newest first) and limit to 10
+      notifications.sort((a, b) => b.time - a.time);
+      const recentNotifications = notifications.slice(0, 10);
+      
+      setUnreadList(recentNotifications);
+      setUnreadCount(notifications.length);
     } catch (err) {
       // ignore polling errors
       console.debug('Unread fetch failed', err?.message || err);
@@ -112,6 +187,14 @@ const AdminLayout = () => {
           </button>
           
           <button 
+            onClick={() => navigate('/admin/date-changes')}
+            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg transition-all"
+          >
+            <FaCalendarAlt className="text-xl text-blue-600 dark:text-blue-400" />
+            <span className="font-semibold">Date Change Req</span>
+          </button>
+          
+          <button 
             onClick={() => navigate('/admin/reviews')}
             className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-yellow-50 dark:hover:bg-gray-700 rounded-lg transition-all"
           >
@@ -171,24 +254,64 @@ const AdminLayout = () => {
 
                 {showNotifications && (
                   <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50">
-                    <div className="p-3 border-b border-gray-100 dark:border-gray-700 font-semibold">Notifications</div>
-                    <div className="max-h-60 overflow-auto">
-                      {unreadList.length === 0 && <div className="p-4 text-sm text-gray-500">No new messages</div>}
+                    <div className="p-3 border-b border-gray-100 dark:border-gray-700 font-semibold text-gray-900 dark:text-white">
+                      Notifications
+                      {unreadCount > 0 && (
+                        <span className="ml-2 text-xs bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full">
+                          {unreadCount}
+                        </span>
+                      )}
+                    </div>
+                    <div className="max-h-96 overflow-auto">
+                      {unreadList.length === 0 && (
+                        <div className="p-4 text-sm text-gray-500 dark:text-gray-400 text-center">
+                          No new notifications
+                        </div>
+                      )}
                       {unreadList.map(n => (
-                        <button key={n._id} onClick={() => { setShowNotifications(false); navigate(`/admin/contacts?focus=${n._id}`); }} className="w-full text-left p-3 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700">
-                          <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" aria-hidden="true"></span>
-                              <div className="font-medium text-sm">{n.name}</div>
+                        <button 
+                          key={n.id} 
+                          onClick={() => { 
+                            setShowNotifications(false); 
+                            n.action(); 
+                          }} 
+                          className="w-full text-left p-3 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 transition-colors"
+                        >
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="flex items-start gap-2 flex-1">
+                              <span className="text-xl flex-shrink-0" aria-hidden="true">{n.icon}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-sm text-gray-900 dark:text-white">
+                                  {n.title}
+                                </div>
+                                <div className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 mt-0.5">
+                                  {n.message}
+                                </div>
+                                <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                  {formatNotificationTime(n.time)}
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-xs text-gray-400">{new Date(n.createdAt).toLocaleTimeString()}</div>
+                            {n.type !== 'contact' && (
+                              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full flex-shrink-0 ${
+                                n.type === 'datechange' 
+                                  ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' 
+                                  : 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400'
+                              }`}>
+                                {n.type === 'datechange' ? 'Date Change' : 'Refund'}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-300 truncate">{n.message}</div>
                         </button>
                       ))}
                     </div>
                     <div className="p-2 text-center border-t border-gray-100 dark:border-gray-700">
-                      <button onClick={() => { setShowNotifications(false); navigate('/admin/contacts'); }} className="text-sm text-primary">View all</button>
+                      <button 
+                        onClick={() => setShowNotifications(false)} 
+                        className="text-sm text-primary hover:underline"
+                      >
+                        Close
+                      </button>
                     </div>
                   </div>
                 )}
