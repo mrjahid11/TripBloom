@@ -53,6 +53,9 @@ const CancellationsRefundQueue = () => {
             const refundAmount = booking.cancellation?.refundAmount || 0;
             const isRefundProcessed = booking.status === 'REFUNDED' || booking.cancellation?.refundProcessed;
             
+            // Calculate refunded so far from refund payments
+            const refundedSoFar = isRefundProcessed ? refundAmount : 0;
+            
             // Determine refund status
             let refundStatus = 'PENDING_REFUND';
             if (isRefundProcessed) {
@@ -85,7 +88,10 @@ const CancellationsRefundQueue = () => {
             return {
               ...booking,
               totalPaid,
+              totalAmount: booking.totalAmount || booking.finalAmount || totalPaid,
               refundAmount,
+              refundedSoFar,
+              isPartialRefund: false,
               refundStatus,
               initiator,
               isDepartureCancelled,
@@ -262,10 +268,10 @@ const CancellationsRefundQueue = () => {
 
   const totalPendingAmount = filteredRefunds
     .filter(r => r.refundStatus !== 'REFUNDED')
-    .reduce((sum, r) => sum + (r.refundAmount - r.refundedSoFar), 0);
+    .reduce((sum, r) => sum + ((r.refundAmount || 0) - (r.refundedSoFar || 0)), 0);
 
   const totalRefundedAmount = filteredRefunds
-    .reduce((sum, r) => sum + r.refundedSoFar, 0);
+    .reduce((sum, r) => sum + (r.refundedSoFar || 0), 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-8">
@@ -387,24 +393,26 @@ const CancellationsRefundQueue = () => {
                     </td>
                     <td className="py-4 px-4 text-center">
                       <div className="font-semibold text-gray-900 dark:text-white">
-                        ${refund.totalAmount?.toLocaleString()}
+                        ${(refund.totalAmount || 0).toLocaleString()}
                       </div>
                     </td>
                     <td className="py-4 px-4 text-center">
                       <div className="font-semibold text-orange-600 dark:text-orange-400">
-                        ${refund.refundAmount?.toLocaleString()}
+                        ${(refund.refundAmount || 0).toLocaleString()}
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {((refund.refundAmount / refund.totalAmount) * 100).toFixed(0)}% of total
-                      </div>
+                      {refund.totalAmount > 0 && refund.refundAmount > 0 && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {((refund.refundAmount / refund.totalAmount) * 100).toFixed(0)}% of total
+                        </div>
+                      )}
                     </td>
                     <td className="py-4 px-4 text-center">
                       <div className="font-semibold text-green-600 dark:text-green-400">
-                        ${refund.refundedSoFar?.toLocaleString()}
+                        ${(refund.refundedSoFar || 0).toLocaleString()}
                       </div>
                       {refund.isPartialRefund && (
                         <div className="text-xs text-orange-600 dark:text-orange-400">
-                          ${(refund.refundAmount - refund.refundedSoFar).toLocaleString()} pending
+                          ${((refund.refundAmount || 0) - (refund.refundedSoFar || 0)).toLocaleString()} pending
                         </div>
                       )}
                     </td>

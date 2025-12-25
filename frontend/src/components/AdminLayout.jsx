@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import ManageUsersMenu from './ManageUsersMenu';
 import { 
@@ -9,11 +9,20 @@ import {
 
 const AdminLayout = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadList, setUnreadList] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef(null);
+
+  // Helper function to check if a path is active
+  const isActive = (path) => {
+    if (path === '/admin') {
+      return location.pathname === '/admin';
+    }
+    return location.pathname.startsWith(path);
+  };
 
   const formatNotificationTime = (time) => {
     const now = new Date();
@@ -143,7 +152,11 @@ const AdminLayout = () => {
           </button>
           <button 
             onClick={() => navigate('/admin')}
-            className="w-full flex items-center space-x-3 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:shadow-lg transition-all"
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg hover:shadow-lg transition-all ${
+              isActive('/admin')
+                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
           >
             <FaChartLine className="text-xl" />
             <span className="font-semibold">Dashboard</span>
@@ -156,49 +169,73 @@ const AdminLayout = () => {
           
           <button 
             onClick={() => navigate('/admin/packages')}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-green-50 dark:hover:bg-gray-700 rounded-lg transition-all"
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/packages')
+                ? 'bg-green-500 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
           >
-            <FaRoute className="text-xl text-green-600 dark:text-green-400" />
+            <FaRoute className="text-xl" />
             <span className="font-semibold">Tour Packages</span>
           </button>
           
           <button 
             onClick={() => navigate('/admin/departures')}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-purple-50 dark:hover:bg-gray-700 rounded-lg transition-all"
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/departures')
+                ? 'bg-purple-500 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
           >
-            <FaCalendar className="text-xl text-purple-600 dark:text-purple-400" />
+            <FaCalendar className="text-xl" />
             <span className="font-semibold">Departures</span>
           </button>
           
           <button 
             onClick={() => navigate('/admin/contacts')}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700 rounded-lg transition-all"
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/contacts')
+                ? 'bg-indigo-500 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
           >
-            <FaEnvelope className="text-xl text-indigo-600 dark:text-indigo-400" />
+            <FaEnvelope className="text-xl" />
             <span className="font-semibold">Contact Messages</span>
           </button>
           
           <button 
             onClick={() => navigate('/admin/refunds')}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-gray-700 rounded-lg transition-all"
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/refunds')
+                ? 'bg-red-500 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
           >
-            <FaDollarSign className="text-xl text-red-600 dark:text-red-400" />
+            <FaDollarSign className="text-xl" />
             <span className="font-semibold">Refund Queue</span>
           </button>
           
           <button 
             onClick={() => navigate('/admin/date-changes')}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg transition-all"
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/date-changes')
+                ? 'bg-blue-500 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
           >
-            <FaCalendarAlt className="text-xl text-blue-600 dark:text-blue-400" />
+            <FaCalendarAlt className="text-xl" />
             <span className="font-semibold">Date Change Req</span>
           </button>
           
           <button 
             onClick={() => navigate('/admin/reviews')}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-yellow-50 dark:hover:bg-gray-700 rounded-lg transition-all"
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/reviews')
+                ? 'bg-yellow-500 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
           >
-            <FaStar className="text-xl text-yellow-600 dark:text-yellow-400" />
+            <FaStar className="text-xl" />
             <span className="font-semibold">Reviews</span>
           </button>
           
@@ -206,9 +243,13 @@ const AdminLayout = () => {
 
           <button 
             onClick={() => navigate('/admin/settings')}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-all"
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/settings')
+                ? 'bg-gray-600 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
           >
-            <FaCog className="text-xl text-gray-600 dark:text-gray-400" />
+            <FaCog className="text-xl" />
             <span className="font-semibold">Settings</span>
           </button>
         </nav>
