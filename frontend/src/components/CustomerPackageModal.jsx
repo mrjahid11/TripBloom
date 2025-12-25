@@ -76,20 +76,6 @@ const CustomerPackageModal = ({ isOpen, onClose, packageData, initialTab = 'over
             </div>
 
             <div className="mt-6 bg-gray-50 dark:bg-gray-900 p-4 rounded-md">
-              <h3 className="font-semibold text-lg">What We Offer</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">The package includes the following services and features:</p>
-              <ul className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-700 dark:text-gray-300">
-                {((pkg.inclusions || packageData.inclusions)?.transport) ? <li className="flex items-start gap-2">🚍 <span>Transport: {(pkg.inclusions || packageData.inclusions).transport}</span></li> : null}
-                {((pkg.inclusions || packageData.inclusions)?.hotel) ? <li className="flex items-start gap-2">🏨 <span>Hotel: {(pkg.inclusions || packageData.inclusions).hotel}</span></li> : null}
-                {((pkg.inclusions || packageData.inclusions)?.meals) ? <li className="flex items-start gap-2">🍽️ <span>Meals: {(pkg.inclusions || packageData.inclusions).meals}</span></li> : null}
-                {((pkg.inclusions || packageData.inclusions)?.guide) ? <li className="flex items-start gap-2">🧭 <span>Tour Guide: Professional local guide included</span></li> : null}
-                {((pkg.extras || packageData.extras) && (pkg.extras || packageData.extras).length > 0) ? (
-                  <li className="flex items-start gap-2 col-span-1 md:col-span-2">✨ <span>Extras: {(pkg.extras || packageData.extras).join(', ')}</span></li>
-                ) : null}
-                {(!(pkg.inclusions || packageData.inclusions) && (!pkg.extras || (pkg.extras||[]).length === 0) && (!packageData.extras || packageData.extras.length === 0)) && (
-                  <li className="col-span-2 text-gray-500">No inclusions or extras listed for this package.</li>
-                )}
-              </ul>
 
               <h3 className="font-semibold mt-4">Destinations</h3>
               {destinations.length === 0 ? (
