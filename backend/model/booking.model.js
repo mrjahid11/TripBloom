@@ -120,6 +120,26 @@ const bookingSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  pointsUsed: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  pointsEarned: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  discountAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  finalAmount: {
+    type: Number,
+    required: true,
+    min: 0
+  },
   currency: {
     type: String,
     required: true,
@@ -171,8 +191,39 @@ bookingSchema.virtual('totalPaid').get(function() {
 
 // Virtual for remaining amount
 bookingSchema.virtual('remainingAmount').get(function() {
-  return this.totalAmount - this.totalPaid;
+  return this.finalAmount - this.totalPaid;
 });
+
+// Static method to calculate points for tour category
+bookingSchema.statics.calculatePointsForCategory = function(category, amount) {
+  const pointsRate = {
+    'Adventure': 100,      // 100 points per tour
+    'Beach': 80,
+    'Cultural': 90,
+    'Wildlife': 110,
+    'Mountain': 120,
+    'City Tour': 70,
+    'Cruise': 150,
+    'Religious': 60,
+    'Historical': 85,
+    'Nature': 95
+  };
+  
+  // Base points by category + bonus (1 point per 100 BDT spent)
+  const basePoints = pointsRate[category] || 50;
+  const bonusPoints = Math.floor(amount / 100);
+  
+  return basePoints + bonusPoints;
+};
+
+// Static method to calculate discount from points (1 point = 1 BDT)
+bookingSchema.statics.calculateDiscountFromPoints = function(points, totalAmount) {
+  // Max discount is 20% of total amount
+  const maxDiscount = Math.floor(totalAmount * 0.2);
+  const pointsValue = points; // 1 point = 1 BDT
+  
+  return Math.min(pointsValue, maxDiscount);
+};
 
 // Pre-save middleware to validate dates
 bookingSchema.pre('save', function(next) {

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaPlane, FaHeart, FaHistory, FaUser, FaSignOutAlt, FaMapMarkedAlt, FaCalendarAlt, FaStar } from 'react-icons/fa';
 import Bookings from './Bookings';
-import { getBookingsForCustomer } from './bookings.service';
 import { useAuth } from '../context/AuthContext';
 import CustomerPackageModal from './CustomerPackageModal';
 import MapModal from './MapModal';
@@ -25,6 +24,11 @@ const CustomerDashboard = () => {
   const [bookingModalOpen, setBookingModalOpen] = React.useState(false);
   const [bookingModalData, setBookingModalData] = React.useState(null);
   const [tripsError, setTripsError] = React.useState(null);
+  const [stats, setStats] = React.useState({
+    totalTrips: 0,
+    countriesVisited: 0,
+    rewardPoints: 0
+  });
 
   React.useEffect(() => {
     const load = async () => {
@@ -37,35 +41,93 @@ const CustomerDashboard = () => {
 
       setLoadingTrips(true);
       setTripsError(null);
-      const res = await getBookingsForCustomer(userId);
-      console.debug('[CustomerDashboard] bookings API response:', res);
-      let bookings = [];
-      if (Array.isArray(res)) bookings = res;
-      else if (res && res.success && res.bookings) bookings = res.bookings;
-      else if (res && res.message) setTripsError(res.message);
+      try {
+        const res = await fetch(`/api/bookings?customerId=${userId}`);
+        if (!res.ok) {
+          const text = await res.text();
+          console.error('Dashboard bookings fetch error', res.status, text);
+          setTripsError(`HTTP ${res.status}`);
+          setUpcomingTrips([]);
+          setLoadingTrips(false);
+          return;
+        }
+        const data = await res.json();
+        console.debug('[CustomerDashboard] bookings API response:', data);
+        let bookings = [];
+        if (Array.isArray(data)) bookings = data;
+        else if (data && data.success && data.bookings) bookings = data.bookings;
+        else if (data && data.message) setTripsError(data.message);
 
-      // Filter upcoming (startDate in future) and non-cancelled
-      const now = new Date();
-      const upcoming = bookings.filter(b => {
-        const sd = b.startDate ? new Date(b.startDate) : null;
-        return b.status !== 'CANCELLED' && (!sd || sd >= now) ;
-      }).map(b => ({
-        id: b._id || b.id,
-        // backend populates package under `packageId`
-        destination: b.packageId?.destination || b.packageId?.title || b.package?.destination || b.package?.title || b.packageTitle || 'Package',
-        startDate: b.startDate,
-        endDate: b.endDate,
-        dateLabel: b.startDate ? `${new Date(b.startDate).toLocaleDateString()}${b.endDate ? ' - ' + new Date(b.endDate).toLocaleDateString() : ''}` : 'TBD',
-        image: b.packageId?.photos?.[0] || b.package?.image || `https://source.unsplash.com/featured/?${encodeURIComponent((b.packageId?.destination || b.package?.destination || 'travel'))}`,
-        status: b.status || 'PENDING',
-        booking: b
-      }));
+        // Filter upcoming (startDate in future) and non-cancelled
+        const now = new Date();
+        const upcoming = bookings.filter(b => {
+          const sd = b.startDate ? new Date(b.startDate) : null;
+          return b.status !== 'CANCELLED' && (!sd || sd >= now) ;
+        }).map(b => ({
+          id: b._id || b.id,
+          // backend populates package under `packageId`
+          destination: b.packageId?.destination || b.packageId?.title || b.package?.destination || b.package?.title || b.packageTitle || 'Package',
+          startDate: b.startDate,
+          endDate: b.endDate,
+          dateLabel: b.startDate ? `${new Date(b.startDate).toLocaleDateString()}${b.endDate ? ' - ' + new Date(b.endDate).toLocaleDateString() : ''}` : 'TBD',
+          image: b.packageId?.photos?.[0] || b.package?.image || `https://source.unsplash.com/featured/?${encodeURIComponent((b.packageId?.destination || b.package?.destination || 'travel'))}`,
+          status: b.status || 'PENDING',
+          booking: b
+        }));
 
-      setUpcomingTrips(upcoming);
-      console.debug('[CustomerDashboard] mapped upcomingTrips:', upcoming);
+        setUpcomingTrips(upcoming);
+        console.debug('[CustomerDashboard] mapped upcomingTrips:', upcoming);
+        
+        // Calculate stats from bookings
+        const totalTrips = bookings.filter(b => b.status === 'COMPLETED').length;
+        
+        // Get unique countries from completed bookings
+        const countries = new Set();
+        bookings.filter(b => b.status === 'COMPLETED').forEach(b => {
+          const destinations = b.packageId?.destinations || b.package?.destinations || [];
+          destinations.forEach(dest => {
+            if (dest.country) countries.add(dest.country);
+          });
+        });
+        
+        setStats(prev => ({
+          ...prev,
+          totalTrips,
+          countriesVisited: countries.size
+        }));
+      } catch (err) {
+        console.error('Dashboard bookings error', err);
+        setTripsError('Failed to load trips');
+        setUpcomingTrips([]);
+      }
       setLoadingTrips(false);
     };
     load();
+  }, [user]);
+
+  // Fetch user reward points
+  React.useEffect(() => {
+    const fetchRewardPoints = async () => {
+      const userId = (user && user.id) || localStorage.getItem('userId');
+      console.log('[CustomerDashboard] Fetching reward points for userId:', userId);
+      if (userId) {
+        try {
+          const res = await fetch(`/api/users/${userId}`);
+          const data = await res.json();
+          console.log('[CustomerDashboard] User data response:', data);
+          if (data.success && data.user) {
+            console.log('[CustomerDashboard] Setting reward points:', data.user.rewardPoints);
+            setStats(prev => ({
+              ...prev,
+              rewardPoints: data.user.rewardPoints || 0
+            }));
+          }
+        } catch (err) {
+          console.error('Failed to fetch reward points:', err);
+        }
+      }
+    };
+    fetchRewardPoints();
   }, [user]);
 
   const [savedTours, setSavedTours] = useState([]);
@@ -329,15 +391,15 @@ const CustomerDashboard = () => {
         <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-2xl p-6 shadow-lg">
             <p className="text-blue-100 mb-2">Total Trips</p>
-            <p className="text-4xl font-bold">12</p>
+            <p className="text-4xl font-bold">{stats.totalTrips}</p>
           </div>
           <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-2xl p-6 shadow-lg">
             <p className="text-green-100 mb-2">Countries Visited</p>
-            <p className="text-4xl font-bold">8</p>
+            <p className="text-4xl font-bold">{stats.countriesVisited}</p>
           </div>
           <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-2xl p-6 shadow-lg">
             <p className="text-purple-100 mb-2">Rewards Points</p>
-            <p className="text-4xl font-bold">2,450</p>
+            <p className="text-4xl font-bold">{stats.rewardPoints.toLocaleString()}</p>
           </div>
         </div>
       </div>

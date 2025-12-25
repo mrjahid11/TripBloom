@@ -15,7 +15,7 @@ const PopularDestinations = () => {
 
   const fetchDestinations = async () => {
     try {
-      const response = await axios.get('http://localhost:3000/api/admin/packages');
+      const response = await axios.get('/api/admin/packages');
       if (response.data.success && response.data.packages) {
         // Transform the tour packages data to match the component's expected format
         const transformedPackages = response.data.packages
@@ -94,7 +94,7 @@ const PopularDestinations = () => {
   const handleViewDetails = async (destination) => {
     try {
       // Fetch full package details from the backend
-      const response = await axios.get(`http://localhost:3000/api/admin/packages/${destination.id}`);
+      const response = await axios.get(`/api/admin/packages/${destination.id}`);
       if (response.data.success && response.data.package) {
         setSelectedPackage(response.data.package);
         setIsModalOpen(true);

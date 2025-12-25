@@ -12,7 +12,7 @@ const Reviews = () => {
 
   const fetchReviews = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/reviews');
+      const response = await axios.get('/api/reviews');
       if (response.data && Array.isArray(response.data) && response.data.length > 0) {
         // Filter out reviews to show maximum 6 for landing page
         const displayReviews = response.data.slice(0, 6);

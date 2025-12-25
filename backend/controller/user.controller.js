@@ -137,7 +137,7 @@ export async function getAllUsersController(req, res) {
   }
 }
 // user.controller.js
-import { registerUser, loginUser } from '../service/user.service.js';
+import { registerUser, loginUser, awardSignupBonusToExistingUsers } from '../service/user.service.js';
 import { ROLES } from '../model/user.model.js';
 
 export async function signupController(req, res) {
@@ -179,4 +179,21 @@ export function requireRole(role) {
     }
     return res.status(403).json({ success: false, message: 'Forbidden: insufficient role.' });
   };
+}
+
+// Award signup bonus to existing users
+export async function awardSignupBonusController(req, res) {
+  try {
+    const result = await awardSignupBonusToExistingUsers();
+    if (result.error) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+    res.json({ 
+      success: true, 
+      message: `Awarded signup bonus to ${result.count} existing users`, 
+      users: result.users 
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
 }

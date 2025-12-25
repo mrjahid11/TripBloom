@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { addPayment } from './bookings.service';
 
 const PaymentForm = ({ booking, onSuccess, onCancel }) => {
   const [amount, setAmount] = useState(booking.totalAmount || booking.amount || 0);
@@ -13,12 +12,34 @@ const PaymentForm = ({ booking, onSuccess, onCancel }) => {
     setLoading(true);
     setError(null);
     const transactionRef = `tx_${Date.now()}`;
-    const res = await addPayment(booking._id || booking.id, { amount, method, transactionRef });
-    setLoading(false);
-    if (res && res.success) {
-      onSuccess(res);
-    } else {
-      setError(res?.message || 'Payment failed');
+    
+    try {
+      const res = await fetch(`/api/bookings/${booking._id || booking.id}/payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, method, transactionRef })
+      });
+      
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('Payment API error', res.status, text);
+        setError(`HTTP ${res.status}`);
+        setLoading(false);
+        return;
+      }
+      
+      const data = await res.json();
+      setLoading(false);
+      
+      if (data && data.success) {
+        onSuccess(data);
+      } else {
+        setError(data?.message || 'Payment failed');
+      }
+    } catch (err) {
+      console.error('Payment error', err);
+      setError('Network error');
+      setLoading(false);
     }
   };
 

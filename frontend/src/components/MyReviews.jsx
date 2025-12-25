@@ -24,7 +24,7 @@ const MyReviews = () => {
   const fetchReviews = async () => {
     setLoading(true);
     try {
-      let url = `http://localhost:5000/api/reviews?customerId=${customerId}`;
+      let url = `/api/reviews?customerId=${customerId}`;
       
       if (statusFilter !== 'all') {
         url += `&status=${statusFilter}`;
@@ -49,7 +49,7 @@ const MyReviews = () => {
     }
 
     try {
-      const response = await axios.delete(`http://localhost:5000/api/reviews/${reviewId}`, {
+      const response = await axios.delete(`/api/reviews/${reviewId}`, {
         data: { customerId }
       });
 

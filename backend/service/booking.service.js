@@ -56,7 +56,8 @@ export async function createBooking({
   travelers, 
   totalAmount, 
   currency = 'BDT',
-  reservedSeats = []
+  reservedSeats = [],
+  pointsToUse = 0
 }) {
   try {
     // Validate package exists
@@ -69,6 +70,38 @@ export async function createBooking({
     if (!tourPackage.isActive) {
       return { error: 'This tour package is not currently available' };
     }
+
+    // Get customer to check reward points
+    const customer = await User.findById(customerId);
+    if (!customer) {
+      return { error: 'Customer not found' };
+    }
+
+    // Validate and apply reward points
+    let discountAmount = 0;
+    let pointsUsed = 0;
+    
+    if (pointsToUse > 0) {
+      if (pointsToUse > customer.rewardPoints) {
+        return { error: `You only have ${customer.rewardPoints} reward points available` };
+      }
+      
+      // Calculate discount (max 20% of total)
+      discountAmount = Booking.calculateDiscountFromPoints(pointsToUse, totalAmount);
+      pointsUsed = Math.min(pointsToUse, discountAmount); // Only use points that give discount
+      
+      // Deduct points from customer
+      customer.rewardPoints -= pointsUsed;
+      customer.pointsHistory.push({
+        amount: -pointsUsed,
+        type: 'USED',
+        reason: `Used for booking discount`,
+        date: new Date()
+      });
+      await customer.save();
+    }
+
+    const finalAmount = totalAmount - discountAmount;
 
     // For GROUP bookings, validate departure exists and has availability
     if (bookingType === 'GROUP') {
@@ -136,10 +169,22 @@ export async function createBooking({
       numTravelers,
       travelers,
       totalAmount,
+      pointsUsed,
+      discountAmount,
+      finalAmount,
       currency,
       status: 'PENDING',
       reservedSeats
     });
+
+    // Store booking reference for points history
+    if (pointsUsed > 0) {
+      const lastHistoryEntry = customer.pointsHistory[customer.pointsHistory.length - 1];
+      if (lastHistoryEntry) {
+        lastHistoryEntry.bookingId = booking._id;
+        await customer.save();
+      }
+    }
 
     await booking.save();
 
@@ -416,7 +461,7 @@ export async function getCustomerBookingStats(customerId) {
 // Mark booking as completed (usually called after end date)
 export async function completeBooking(bookingId) {
   try {
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findById(bookingId).populate('packageId');
     if (!booking) {
       return { error: 'Booking not found' };
     }
@@ -426,9 +471,31 @@ export async function completeBooking(bookingId) {
     }
 
     booking.status = 'COMPLETED';
+    
+    // Award reward points to customer
+    const customer = await User.findById(booking.customerId);
+    if (customer && booking.packageId) {
+      const pointsEarned = Booking.calculatePointsForCategory(
+        booking.packageId.category, 
+        booking.finalAmount
+      );
+      
+      booking.pointsEarned = pointsEarned;
+      customer.rewardPoints += pointsEarned;
+      customer.pointsHistory.push({
+        amount: pointsEarned,
+        type: 'EARNED',
+        bookingId: booking._id,
+        reason: `Earned from completing ${booking.packageId.category} tour`,
+        date: new Date()
+      });
+      
+      await customer.save();
+    }
+    
     await booking.save();
 
-    return { booking };
+    return { booking, pointsEarned: booking.pointsEarned };
   } catch (err) {
     console.error('Error completing booking:', err);
     return { error: 'Failed to complete booking' };

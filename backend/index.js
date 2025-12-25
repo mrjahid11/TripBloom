@@ -22,7 +22,7 @@ import { ROLES, User } from './model/user.model.js';
 // Remove username index if it exists (for migration from old schema)
 User.collection.dropIndex('username_1').catch(() => {});
 
-import { signupController, loginController, requireRole, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController, getSavedPackagesController, savePackageController, unsavePackageController, getUserController, updateProfileController, changePasswordController } from './controller/user.controller.js';
+import { signupController, loginController, requireRole, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController, getSavedPackagesController, savePackageController, unsavePackageController, getUserController, updateProfileController, changePasswordController, awardSignupBonusController } from './controller/user.controller.js';
 import { getOperatorDashboardController, getOperatorProfileController, updateOperatorProfileController } from './controller/operator.controller.js';
 
 
@@ -68,6 +68,7 @@ app.get('/api/admin/users', listUsersController); // List users with filters
 app.post('/api/admin/users', createUserController); // Create user
 app.put('/api/admin/users/:userId', updateUserController); // Update user info
 app.delete('/api/admin/users/:userId', deactivateUserController); // Deactivate user
+app.post('/api/admin/award-signup-bonus', awardSignupBonusController); // Award signup bonus to existing users
 
 // User profile routes
 app.get('/api/users/:userId', getUserController); // Get user by ID
@@ -199,11 +200,6 @@ app.get('/api/users/:userId/saved', getSavedPackagesController);
 app.post('/api/users/:userId/save/:packageId', savePackageController);
 app.delete('/api/users/:userId/save/:packageId', unsavePackageController);
 
-app.listen(PORT, () => {
-  console.log(`🌸 TripBloom server running on port ${PORT}`);
-});
-
-
 
 
 
@@ -300,4 +296,8 @@ app.get('/api/stats', async (req, res) => {
       stats: { packages: 0, customers: 0, reviews: 0, destinations: 0 }
     });
   }
+});
+// Start server - MUST BE LAST
+app.listen(PORT, () => {
+  console.log(`🌸 TripBloom server running on port ${PORT}`);
 });

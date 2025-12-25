@@ -15,6 +15,7 @@ const CustomerProfile = () => {
     fullName: '',
     email: '',
     phone: '',
+    rewardPoints: 0,
   });
 
   // Password change state
@@ -36,13 +37,14 @@ const CustomerProfile = () => {
       }
 
       try {
-        const res = await fetch(`http://localhost:5000/api/users/${userId}`);
+        const res = await fetch(`/api/users/${userId}`);
         const data = await res.json();
         if (data.success && data.user) {
           setProfileData({
             fullName: data.user.fullName || '',
             email: data.user.email || '',
             phone: data.user.phone || '',
+            rewardPoints: data.user.rewardPoints || 0,
           });
         }
       } catch (err) {
@@ -66,7 +68,7 @@ const CustomerProfile = () => {
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/users/${userId}`, {
+      const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -125,7 +127,7 @@ const CustomerProfile = () => {
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/users/${userId}/password`, {
+      const res = await fetch(`/api/users/${userId}/password`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -206,6 +208,21 @@ const CustomerProfile = () => {
               <FaLock className="inline mr-2" />
               Change Password
             </button>
+          </div>
+
+          {/* Reward Points Banner */}
+          <div className="bg-gradient-to-r from-yellow-400 to-orange-500 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-white text-sm font-medium">Your Reward Points</p>
+                <p className="text-white text-3xl font-bold">⭐ {profileData.rewardPoints} Points</p>
+                <p className="text-yellow-100 text-xs mt-1">1 point = 1 BDT | Use up to 20% discount on bookings</p>
+              </div>
+              <div className="text-white text-right">
+                <p className="text-sm">Points Value</p>
+                <p className="text-2xl font-bold">৳{profileData.rewardPoints}</p>
+              </div>
+            </div>
           </div>
 
           {/* Profile Tab */}

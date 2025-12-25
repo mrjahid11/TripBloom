@@ -19,7 +19,7 @@ const ReviewsModerationList = () => {
   const fetchReviews = async () => {
     setLoading(true);
     try {
-      let url = 'http://localhost:5000/api/reviews';
+      let url = '/api/reviews';
       const params = [];
       
       if (statusFilter !== 'all') {
@@ -53,7 +53,7 @@ const ReviewsModerationList = () => {
   const handleModerate = async (reviewId, status, note = '') => {
     try {
       const response = await axios.patch(
-        `http://localhost:5000/api/reviews/${reviewId}/moderate`,
+        `/api/reviews/${reviewId}/moderate`,
         { status, moderatorNote: note }
       );
 

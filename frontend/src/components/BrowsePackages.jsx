@@ -64,7 +64,7 @@ const BrowsePackages = () => {
       try {
         setLoadingSuggestions(true);
         // Fetch active packages from backend as suggestions
-        const res = await axios.get('http://localhost:5000/api/packages/search');
+        const res = await axios.get('/api/packages/search');
         if (res && res.data && Array.isArray(res.data.packages)) {
           setSuggestedPackages(res.data.packages.slice(0, 6));
         }
@@ -90,7 +90,7 @@ const BrowsePackages = () => {
       if (searchTerm) params.search = searchTerm;
 
       console.log('[BrowsePackages] Fetching with params:', params);
-      const response = await axios.get('http://localhost:5000/api/packages/search', { params });
+      const response = await axios.get('/api/packages/search', { params });
       
       console.log('[BrowsePackages] Response:', response.data);
       if (response.data.success) {

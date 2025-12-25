@@ -12,10 +12,25 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showImages, setShowImages] = useState(true);
   const [showBookingForm, setShowBookingForm] = useState(false);
+  const [isCustomBooking, setIsCustomBooking] = useState(false);
+  const [userRewardPoints, setUserRewardPoints] = useState(0);
   const [bookingData, setBookingData] = useState({
     numTravelers: 1,
     startDate: '',
-    customizations: ''
+    customizations: '',
+    bookingFor: 'self', // 'self' or 'others'
+    pointsToUse: 0,
+    travelers: [
+      { fullName: '', age: '', phone: '' }
+    ],
+    customPreferences: {
+      excludeItems: [],
+      addItems: '',
+      dietary: '',
+      accommodation: '',
+      transport: '',
+      activities: ''
+    }
   });
 
   // Prevent background scroll when modal is open
@@ -27,6 +42,23 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
       document.body.style.top = `-${scrollY}px`;
       document.body.style.width = '100%';
       document.body.style.overflow = 'hidden';
+      
+      // Fetch user's reward points
+      const fetchRewardPoints = async () => {
+        const userId = localStorage.getItem('userId');
+        if (userId) {
+          try {
+            const res = await fetch(`/api/users/${userId}`);
+            const data = await res.json();
+            if (data.success && data.user) {
+              setUserRewardPoints(data.user.rewardPoints || 0);
+            }
+          } catch (err) {
+            console.error('Failed to fetch reward points:', err);
+          }
+        }
+      };
+      fetchRewardPoints();
       
       return () => {
         // Restore scroll position without jump
@@ -93,26 +125,153 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
   };
 
   const handleBooking = async () => {
+    // Validation
+    if (!bookingData.startDate) {
+      alert('Please select a start date for your tour.');
+      return;
+    }
+
+    if (!bookingData.numTravelers || bookingData.numTravelers < 1) {
+      alert('Please specify number of travelers.');
+      return;
+    }
+
+    // Validate traveler information
+    if (bookingData.bookingFor === 'others') {
+      for (let i = 0; i < bookingData.numTravelers; i++) {
+        const traveler = bookingData.travelers[i];
+        if (!traveler || !traveler.fullName || !traveler.age || !traveler.phone) {
+          alert(`Please fill in all details for Traveler ${i + 1} (Name, Age, Phone)`);
+          return;
+        }
+      }
+    }
+
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      alert('Please log in to make a booking.');
+      return;
+    }
+
     try {
-      const response = await axios.post('http://localhost:3000/api/bookings', {
+      // Calculate end date based on package duration
+      const startDate = new Date(bookingData.startDate);
+      const durationDays = packageData.duration || 3; // Default 3 days if not specified
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + durationDays);
+
+      // Build travelers array
+      let travelers = [];
+      if (bookingData.bookingFor === 'self') {
+        // Get user info from localStorage or context
+        const userFullName = localStorage.getItem('userFullName') || 'Customer';
+        const userPhone = localStorage.getItem('userPhone') || '';
+        
+        for (let i = 0; i < bookingData.numTravelers; i++) {
+          travelers.push({
+            fullName: i === 0 ? userFullName : `Guest ${i}`,
+            age: 30, // Default age
+            phone: i === 0 ? userPhone : ''
+          });
+        }
+      } else {
+        // Use the traveler details provided
+        travelers = bookingData.travelers.slice(0, bookingData.numTravelers).map(t => ({
+          fullName: t.fullName,
+          age: parseInt(t.age),
+          phone: t.phone
+        }));
+      }
+
+      const totalAmount = packageData.basePrice * bookingData.numTravelers;
+
+      // Map package type to booking type
+      // Package types: PERSONAL, GROUP
+      // Booking types: PRIVATE, GROUP, CUSTOM
+      let bookingType = 'GROUP';
+      if (packageData.type === 'PERSONAL') {
+        bookingType = 'PRIVATE';
+      } else if (packageData.type === 'GROUP') {
+        bookingType = 'GROUP';
+      }
+
+      // Build customization text including custom preferences if it's a custom booking
+      let customizationText = bookingData.customizations || '';
+      if (isCustomBooking) {
+        const prefs = [];
+        if (bookingData.customPreferences.excludeItems.length > 0) {
+          prefs.push(`Exclude: ${bookingData.customPreferences.excludeItems.join(', ')}`);
+        }
+        if (bookingData.customPreferences.addItems) {
+          prefs.push(`Add: ${bookingData.customPreferences.addItems}`);
+        }
+        if (bookingData.customPreferences.dietary) {
+          prefs.push(`Dietary: ${bookingData.customPreferences.dietary}`);
+        }
+        if (bookingData.customPreferences.accommodation) {
+          prefs.push(`Accommodation: ${bookingData.customPreferences.accommodation}`);
+        }
+        if (bookingData.customPreferences.transport) {
+          prefs.push(`Transport: ${bookingData.customPreferences.transport}`);
+        }
+        if (bookingData.customPreferences.activities) {
+          prefs.push(`Activity Level: ${bookingData.customPreferences.activities}`);
+        }
+        if (prefs.length > 0) {
+          customizationText = prefs.join(' | ') + (customizationText ? ' | ' + customizationText : '');
+        }
+      }
+
+      const bookingPayload = {
+        customerId: userId,
         packageId: packageData._id,
-        ...bookingData
-      });
+        bookingType: bookingType,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        numTravelers: bookingData.numTravelers,
+        travelers: travelers,
+        totalAmount: totalAmount,
+        currency: packageData.currency || 'BDT',
+        customizations: customizationText,
+        pointsToUse: bookingData.pointsToUse || 0
+      };
+
+      const response = await axios.post('/api/bookings', bookingPayload);
       
       if (response.data.success) {
-        alert('Booking request submitted successfully!');
+        alert('Booking request submitted successfully! You can view and manage your booking in the dashboard.');
         setShowBookingForm(false);
+        setIsCustomBooking(false);
+        setBookingData({ 
+          numTravelers: 1, 
+          startDate: '', 
+          customizations: '', 
+          bookingFor: 'self',
+          travelers: [{ fullName: '', age: '', phone: '' }],
+          customPreferences: {
+            excludeItems: [],
+            addItems: '',
+            dietary: '',
+            accommodation: '',
+            transport: '',
+            activities: ''
+          }
+        });
         onClose();
+      } else {
+        alert(response.data.message || 'Failed to submit booking.');
       }
     } catch (error) {
       console.error('Booking error:', error);
-      alert('Failed to submit booking. Please try again.');
+      const errorMessage = error.response?.data?.message || 'Failed to submit booking. Please try again.';
+      alert(errorMessage);
     }
   };
 
   const handleCustomize = () => {
-    // For personal tours, allow customization
-    alert('Customization feature coming soon! You will be able to modify destinations, duration, and preferences.');
+    // For personal tours, allow customization - open booking form with custom mode
+    setIsCustomBooking(true);
+    setShowBookingForm(true);
   };
 
   const isGroupTour = packageData.type === 'GROUP';
@@ -378,7 +537,10 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                       {isGroupTour ? (
                         <>
                           <button 
-                            onClick={() => setShowBookingForm(true)}
+                            onClick={() => {
+                              setIsCustomBooking(false);
+                              setShowBookingForm(true);
+                            }}
                             className="w-full py-4 bg-gradient-to-r from-primary to-green-600 text-white font-bold rounded-xl hover:from-green-600 hover:to-primary transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
                           >
                             Book This Tour
@@ -390,7 +552,10 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                       ) : (
                         <>
                           <button 
-                            onClick={() => setShowBookingForm(true)}
+                            onClick={() => {
+                              setIsCustomBooking(false);
+                              setShowBookingForm(true);
+                            }}
                             className="w-full py-4 bg-gradient-to-r from-primary to-green-600 text-white font-bold rounded-xl hover:from-green-600 hover:to-primary transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
                           >
                             Book As-Is
@@ -414,6 +579,51 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                     <div className="space-y-4">
                       <h4 className="font-bold text-gray-900 dark:text-white mb-4">Book Your Adventure</h4>
                       
+                      {/* Booking For Selection */}
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                          Booking For
+                        </label>
+                        <div className="flex gap-4">
+                          <label className="flex items-center cursor-pointer">
+                            <input
+                              type="radio"
+                              name="bookingFor"
+                              value="self"
+                              checked={bookingData.bookingFor === 'self'}
+                              onChange={(e) => setBookingData({
+                                ...bookingData, 
+                                bookingFor: e.target.value,
+                                travelers: [{ fullName: '', age: '', phone: '' }]
+                              })}
+                              className="mr-2"
+                            />
+                            <span className="text-gray-700 dark:text-gray-300">Myself</span>
+                          </label>
+                          <label className="flex items-center cursor-pointer">
+                            <input
+                              type="radio"
+                              name="bookingFor"
+                              value="others"
+                              checked={bookingData.bookingFor === 'others'}
+                              onChange={(e) => {
+                                const travelers = [];
+                                for (let i = 0; i < bookingData.numTravelers; i++) {
+                                  travelers.push({ fullName: '', age: '', phone: '' });
+                                }
+                                setBookingData({
+                                  ...bookingData, 
+                                  bookingFor: e.target.value,
+                                  travelers
+                                });
+                              }}
+                              className="mr-2"
+                            />
+                            <span className="text-gray-700 dark:text-gray-300">Others</span>
+                          </label>
+                        </div>
+                      </div>
+
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                           Number of Travelers
@@ -422,35 +632,320 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                           type="number"
                           min="1"
                           value={bookingData.numTravelers}
-                          onChange={(e) => setBookingData({...bookingData, numTravelers: parseInt(e.target.value)})}
+                          onChange={(e) => {
+                            const count = parseInt(e.target.value) || 1;
+                            const travelers = [];
+                            for (let i = 0; i < count; i++) {
+                              travelers.push(bookingData.travelers[i] || { fullName: '', age: '', phone: '' });
+                            }
+                            setBookingData({
+                              ...bookingData, 
+                              numTravelers: count,
+                              travelers: bookingData.bookingFor === 'others' ? travelers : bookingData.travelers
+                            });
+                          }}
                           className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white"
                         />
                       </div>
 
+                      {/* Traveler Information for 'others' */}
+                      {bookingData.bookingFor === 'others' && (
+                        <div className="space-y-4 max-h-80 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-4">
+                          <h5 className="font-semibold text-gray-900 dark:text-white sticky top-0 bg-white dark:bg-gray-800 pb-2">
+                            Traveler Details <span className="text-red-500">*</span>
+                          </h5>
+                          {Array.from({ length: bookingData.numTravelers }).map((_, index) => (
+                            <div key={index} className="border-b border-gray-200 dark:border-gray-700 pb-4 last:border-b-0">
+                              <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">
+                                Traveler {index + 1}
+                              </p>
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  placeholder="Full Name *"
+                                  value={bookingData.travelers[index]?.fullName || ''}
+                                  onChange={(e) => {
+                                    const newTravelers = [...bookingData.travelers];
+                                    newTravelers[index] = {
+                                      ...newTravelers[index],
+                                      fullName: e.target.value
+                                    };
+                                    setBookingData({...bookingData, travelers: newTravelers});
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white text-sm"
+                                  required
+                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input
+                                    type="number"
+                                    placeholder="Age *"
+                                    min="1"
+                                    max="120"
+                                    value={bookingData.travelers[index]?.age || ''}
+                                    onChange={(e) => {
+                                      const newTravelers = [...bookingData.travelers];
+                                      newTravelers[index] = {
+                                        ...newTravelers[index],
+                                        age: e.target.value
+                                      };
+                                      setBookingData({...bookingData, travelers: newTravelers});
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white text-sm"
+                                    required
+                                  />
+                                  <input
+                                    type="tel"
+                                    placeholder="Phone Number *"
+                                    value={bookingData.travelers[index]?.phone || ''}
+                                    onChange={(e) => {
+                                      const newTravelers = [...bookingData.travelers];
+                                      newTravelers[index] = {
+                                        ...newTravelers[index],
+                                        phone: e.target.value
+                                      };
+                                      setBookingData({...bookingData, travelers: newTravelers});
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white text-sm"
+                                    required
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                          Preferred Start Date
+                          Preferred Start Date <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="date"
                           value={bookingData.startDate}
                           onChange={(e) => setBookingData({...bookingData, startDate: e.target.value})}
+                          min={new Date().toISOString().split('T')[0]}
+                          required
                           className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white"
                         />
                       </div>
 
+                      {/* Customization Options - Only show if this is a custom booking */}
+                      {isCustomBooking && (
+                        <div className="border-2 border-purple-300 dark:border-purple-700 rounded-lg p-4 space-y-4 bg-purple-50 dark:bg-purple-900/20">
+                          <h5 className="font-bold text-purple-800 dark:text-purple-300 flex items-center gap-2">
+                            <FaEdit /> Customize Your Tour
+                          </h5>
+                          
+                          {/* Exclude Items */}
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              Exclude from Package (Select items you don't want)
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {['Accommodation', 'Meals', 'Transport', 'Guide', 'Activities', 'Insurance'].map((item) => (
+                                <label key={item} className="flex items-center cursor-pointer text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={bookingData.customPreferences.excludeItems.includes(item)}
+                                    onChange={(e) => {
+                                      const newExcluded = e.target.checked
+                                        ? [...bookingData.customPreferences.excludeItems, item]
+                                        : bookingData.customPreferences.excludeItems.filter(i => i !== item);
+                                      setBookingData({
+                                        ...bookingData,
+                                        customPreferences: {
+                                          ...bookingData.customPreferences,
+                                          excludeItems: newExcluded
+                                        }
+                                      });
+                                    }}
+                                    className="mr-2"
+                                  />
+                                  <span className="text-gray-700 dark:text-gray-300">{item}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Add Custom Items/Activities */}
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              Add Custom Activities or Destinations
+                            </label>
+                            <textarea
+                              value={bookingData.customPreferences.addItems}
+                              onChange={(e) => setBookingData({
+                                ...bookingData,
+                                customPreferences: {
+                                  ...bookingData.customPreferences,
+                                  addItems: e.target.value
+                                }
+                              })}
+                              rows="2"
+                              placeholder="E.g., Visit local markets, Photography session, Hiking, specific destinations..."
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white text-sm resize-none"
+                            />
+                          </div>
+
+                          {/* Dietary Preferences */}
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              Dietary Preferences
+                            </label>
+                            <input
+                              type="text"
+                              value={bookingData.customPreferences.dietary}
+                              onChange={(e) => setBookingData({
+                                ...bookingData,
+                                customPreferences: {
+                                  ...bookingData.customPreferences,
+                                  dietary: e.target.value
+                                }
+                              })}
+                              placeholder="E.g., Vegetarian, Vegan, Halal, Allergies..."
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white text-sm"
+                            />
+                          </div>
+
+                          {/* Accommodation Preference */}
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              Accommodation Preference
+                            </label>
+                            <select
+                              value={bookingData.customPreferences.accommodation}
+                              onChange={(e) => setBookingData({
+                                ...bookingData,
+                                customPreferences: {
+                                  ...bookingData.customPreferences,
+                                  accommodation: e.target.value
+                                }
+                              })}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white text-sm"
+                            >
+                              <option value="">No Preference</option>
+                              <option value="budget">Budget (Hostel/Guesthouse)</option>
+                              <option value="standard">Standard (3-Star Hotel)</option>
+                              <option value="luxury">Luxury (4-5 Star Hotel)</option>
+                              <option value="resort">Resort</option>
+                              <option value="boutique">Boutique Hotel</option>
+                            </select>
+                          </div>
+
+                          {/* Transport Preference */}
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              Transport Preference
+                            </label>
+                            <select
+                              value={bookingData.customPreferences.transport}
+                              onChange={(e) => setBookingData({
+                                ...bookingData,
+                                customPreferences: {
+                                  ...bookingData.customPreferences,
+                                  transport: e.target.value
+                                }
+                              })}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white text-sm"
+                            >
+                              <option value="">No Preference</option>
+                              <option value="private-car">Private Car/Van</option>
+                              <option value="shared">Shared Transport</option>
+                              <option value="luxury">Luxury Vehicle</option>
+                              <option value="public">Public Transport</option>
+                            </select>
+                          </div>
+
+                          {/* Activity Level */}
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              Preferred Activity Level
+                            </label>
+                            <select
+                              value={bookingData.customPreferences.activities}
+                              onChange={(e) => setBookingData({
+                                ...bookingData,
+                                customPreferences: {
+                                  ...bookingData.customPreferences,
+                                  activities: e.target.value
+                                }
+                              })}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white text-sm"
+                            >
+                              <option value="">No Preference</option>
+                              <option value="relaxed">Relaxed (Leisure focused)</option>
+                              <option value="moderate">Moderate (Balanced)</option>
+                              <option value="active">Active (Adventure focused)</option>
+                              <option value="extreme">Extreme (High adventure)</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                          Special Requests (Optional)
+                          {isCustomBooking ? 'Additional Notes (Optional)' : 'Special Requests (Optional)'}
                         </label>
                         <textarea
                           value={bookingData.customizations}
                           onChange={(e) => setBookingData({...bookingData, customizations: e.target.value})}
                           rows="3"
-                          placeholder="Any special requirements or preferences..."
+                          placeholder={isCustomBooking ? "Any other special requirements..." : "Any special requirements or preferences..."}
                           className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white resize-none"
                         />
                       </div>
+
+                      {/* Reward Points Section */}
+                      {userRewardPoints > 0 && (
+                        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-2 border-yellow-400 dark:border-yellow-600 p-4 rounded-lg">
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <p className="font-bold text-yellow-800 dark:text-yellow-300 flex items-center gap-2">
+                                ⭐ Available Reward Points
+                              </p>
+                              <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                                You have {userRewardPoints} points (1 point = 1 BDT)
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                              Use Points for Discount (Max 20% of total)
+                            </label>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                min="0"
+                                max={Math.min(userRewardPoints, Math.floor((packageData.basePrice * bookingData.numTravelers) * 0.2))}
+                                value={bookingData.pointsToUse}
+                                onChange={(e) => {
+                                  const points = parseInt(e.target.value) || 0;
+                                  const maxPoints = Math.min(userRewardPoints, Math.floor((packageData.basePrice * bookingData.numTravelers) * 0.2));
+                                  setBookingData({...bookingData, pointsToUse: Math.min(points, maxPoints)});
+                                }}
+                                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-yellow-500 dark:bg-gray-700 dark:text-white"
+                                placeholder="Enter points to use"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const maxPoints = Math.min(userRewardPoints, Math.floor((packageData.basePrice * bookingData.numTravelers) * 0.2));
+                                  setBookingData({...bookingData, pointsToUse: maxPoints});
+                                }}
+                                className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600"
+                              >
+                                Use Max
+                              </button>
+                            </div>
+                            {bookingData.pointsToUse > 0 && (
+                              <p className="text-sm text-green-600 dark:text-green-400 mt-2">
+                                💰 Discount: -{bookingData.pointsToUse} BDT
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="bg-gray-100 dark:bg-gray-900 p-4 rounded-lg">
                         <div className="flex justify-between mb-2">
@@ -461,10 +956,27 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                           <span className="text-gray-600 dark:text-gray-400">Travelers:</span>
                           <span className="font-bold text-gray-900 dark:text-white">×{bookingData.numTravelers}</span>
                         </div>
+                        <div className="flex justify-between mb-2">
+                          <span className="text-gray-600 dark:text-gray-400">Subtotal:</span>
+                          <span className="font-bold text-gray-900 dark:text-white">${(packageData.basePrice * bookingData.numTravelers).toLocaleString()}</span>
+                        </div>
+                        {bookingData.pointsToUse > 0 && (
+                          <div className="flex justify-between mb-2 text-green-600 dark:text-green-400">
+                            <span className="font-semibold">Points Discount:</span>
+                            <span className="font-semibold">-${bookingData.pointsToUse}</span>
+                          </div>
+                        )}
                         <div className="border-t border-gray-300 dark:border-gray-700 mt-2 pt-2 flex justify-between">
                           <span className="font-bold text-gray-900 dark:text-white">Total:</span>
-                          <span className="font-bold text-2xl text-primary">${(packageData.basePrice * bookingData.numTravelers).toLocaleString()}</span>
+                          <span className="font-bold text-2xl text-primary">
+                            ${((packageData.basePrice * bookingData.numTravelers) - (bookingData.pointsToUse || 0)).toLocaleString()}
+                          </span>
                         </div>
+                        {bookingData.pointsToUse > 0 && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                            You'll save ${bookingData.pointsToUse} with your reward points!
+                          </p>
+                        )}
                       </div>
 
                       <button 

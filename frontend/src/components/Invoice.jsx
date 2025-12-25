@@ -29,7 +29,7 @@ const Invoice = ({ isOpen, onClose, booking }) => {
 
   const packageInfo = booking.packageId || {};
   const totalPaid = (booking.payments || [])
-    .filter(p => p.status === 'COMPLETED' || p.status === 'CONFIRMED')
+    .filter(p => p.status === 'SUCCESS' || p.status === 'COMPLETED' || p.status === 'CONFIRMED')
     .reduce((sum, p) => sum + (p.amount || 0), 0);
   const balance = (booking.totalAmount || 0) - totalPaid;
 

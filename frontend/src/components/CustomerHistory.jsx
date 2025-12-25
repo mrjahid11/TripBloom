@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { getBookingsForCustomer } from './bookings.service';
 import { useAuth } from '../context/AuthContext';
 import BookingDetailModal from './BookingDetailModal';
 import { FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaStar } from 'react-icons/fa';
@@ -22,22 +21,37 @@ const CustomerHistory = () => {
       }
       
       setLoading(true);
-      const res = await getBookingsForCustomer(userId);
-      let bookings = [];
-      if (res && res.success && res.bookings) bookings = res.bookings;
-      else if (Array.isArray(res)) bookings = res;
-      else setError(res?.message || 'Failed to load history');
+      try {
+        const res = await fetch(`/api/bookings?customerId=${userId}`);
+        if (!res.ok) {
+          const text = await res.text();
+          console.error('History fetch error', res.status, text);
+          setError(`HTTP ${res.status}`);
+          setHistory([]);
+          setLoading(false);
+          return;
+        }
+        const data = await res.json();
+        let bookings = [];
+        if (data && data.success && data.bookings) bookings = data.bookings;
+        else if (Array.isArray(data)) bookings = data;
+        else setError(data?.message || 'Failed to load history');
 
-      // Filter for completed/cancelled bookings or past trips
-      const now = new Date();
-      const pastBookings = bookings.filter(b => {
-        const endDate = b.endDate ? new Date(b.endDate) : null;
-        return b.status === 'COMPLETED' || 
-               b.status === 'CANCELLED' || 
-               (endDate && endDate < now);
-      }).sort((a, b) => new Date(b.endDate || b.createdAt) - new Date(a.endDate || a.createdAt));
+        // Filter for completed/cancelled bookings or past trips
+        const now = new Date();
+        const pastBookings = bookings.filter(b => {
+          const endDate = b.endDate ? new Date(b.endDate) : null;
+          return b.status === 'COMPLETED' || 
+                 b.status === 'CANCELLED' || 
+                 (endDate && endDate < now);
+        }).sort((a, b) => new Date(b.endDate || b.createdAt) - new Date(a.endDate || a.createdAt));
 
-      setHistory(pastBookings);
+        setHistory(pastBookings);
+      } catch (err) {
+        console.error('History fetch error', err);
+        setError('Failed to load history');
+        setHistory([]);
+      }
       setLoading(false);
     };
     load();

@@ -64,6 +64,8 @@ export async function deactivateUser({ userId }) {
 import { User, ROLES } from '../model/user.model.js';
 import { TourPackage } from '../model/tourPackage.model.js';
 
+// Signup bonus points for new users
+const SIGNUP_BONUS_POINTS = 100;
 
 export async function registerUser({ fullName, email, phone, passwordHash, roles }) {
   if (!fullName || !email || !passwordHash || !roles) {
@@ -73,9 +75,25 @@ export async function registerUser({ fullName, email, phone, passwordHash, roles
   if (existingUser) {
     return { error: 'Email already exists.' };
   }
-  const user = new User({ fullName, email, phone, passwordHash, roles });
+  
+  // Create user with signup bonus points
+  const user = new User({ 
+    fullName, 
+    email, 
+    phone, 
+    passwordHash, 
+    roles,
+    rewardPoints: SIGNUP_BONUS_POINTS,
+    pointsHistory: [{
+      amount: SIGNUP_BONUS_POINTS,
+      type: 'EARNED',
+      reason: 'Welcome bonus for new account',
+      date: new Date()
+    }]
+  });
+  
   await user.save();
-  return { user: { fullName, email, phone, roles } };
+  return { user: { fullName, email, phone, roles, rewardPoints: SIGNUP_BONUS_POINTS } };
 }
 
 
@@ -160,4 +178,54 @@ export async function changePassword({ userId, currentPassword, newPassword }) {
   user.passwordHash = newPassword;
   await user.save();
   return { success: true };
+}
+
+// Award signup bonus to existing users who don't have it
+export async function awardSignupBonusToExistingUsers() {
+  try {
+    // Find ALL customer users
+    const customers = await User.find({
+      roles: { $in: ['CUSTOMER', 'customer'] }
+    });
+
+    console.log(`Found ${customers.length} customer(s)`);
+    const updatedUsers = [];
+    
+    for (const customer of customers) {
+      // Check if they already have a welcome bonus in history
+      const hasWelcomeBonus = customer.pointsHistory?.some(
+        h => h.reason?.includes('Welcome bonus')
+      );
+      
+      console.log(`${customer.fullName}: currentPoints=${customer.rewardPoints || 0}, hasWelcomeBonus=${hasWelcomeBonus}`);
+      
+      if (!hasWelcomeBonus) {
+        customer.rewardPoints = (customer.rewardPoints || 0) + SIGNUP_BONUS_POINTS;
+        customer.pointsHistory = customer.pointsHistory || [];
+        customer.pointsHistory.push({
+          amount: SIGNUP_BONUS_POINTS,
+          type: 'EARNED',
+          reason: 'Welcome bonus for existing account',
+          date: new Date()
+        });
+        await customer.save();
+        updatedUsers.push(customer);
+        console.log(`✅ Awarded ${SIGNUP_BONUS_POINTS} points to ${customer.fullName}. New total: ${customer.rewardPoints}`);
+      }
+    }
+
+    console.log(`Successfully awarded bonus to ${updatedUsers.length} user(s)`);
+    return { 
+      success: true, 
+      count: updatedUsers.length, 
+      users: updatedUsers.map(u => ({ 
+        id: u._id, 
+        name: u.fullName, 
+        points: u.rewardPoints 
+      })) 
+    };
+  } catch (err) {
+    console.error('Error awarding signup bonus:', err);
+    return { error: 'Failed to award signup bonus', details: err.message };
+  }
 }

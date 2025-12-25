@@ -19,6 +19,14 @@ const userSchema = new mongoose.Schema({
     required: true
   },
   savedPackages: [{ type: mongoose.Schema.Types.ObjectId, ref: 'TourPackage' }],
+  rewardPoints: { type: Number, default: 0, min: 0 },
+  pointsHistory: [{
+    amount: { type: Number, required: true },
+    type: { type: String, enum: ['EARNED', 'USED', 'EXPIRED'], required: true },
+    bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking' },
+    reason: { type: String },
+    date: { type: Date, default: Date.now }
+  }],
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
 });
