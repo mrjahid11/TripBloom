@@ -7,7 +7,8 @@ import {
   cancelBooking,
   addPayment,
   getCustomerBookingStats,
-  completeBooking
+  completeBooking,
+  cancelUnpaidExpiredBookings
 } from '../service/booking.service.js';
 
 // Create a new booking
@@ -245,4 +246,18 @@ export async function completeBookingController(req, res) {
     message: 'Booking marked as completed',
     booking: result.booking
   });
+}
+
+// Cancel unpaid bookings that have passed start date
+export async function cancelUnpaidBookingsController(req, res) {
+  try {
+    const result = await cancelUnpaidExpiredBookings();
+    res.json({ 
+      success: true, 
+      message: `${result.cancelledCount} unpaid booking(s) cancelled.`,
+      cancelledBookings: result.bookings
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
 }

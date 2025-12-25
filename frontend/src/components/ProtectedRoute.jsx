@@ -1,19 +1,16 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 // Usage: <ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>
 const ProtectedRoute = ({ children, role }) => {
-  // Get user info from localStorage (replace with context for real auth)
-  const userName = localStorage.getItem('userName');
-  const userRole = localStorage.getItem('userRole');
+  const { user } = useAuth();
 
   // Not logged in
-  if (!userName || !userRole) {
-    return <Navigate to="/" replace />;
-  }
+  if (!user || !user.id) return <Navigate to="/" replace />;
 
   // Role mismatch
-  if (role && userRole.toLowerCase() !== role.toLowerCase()) {
+  if (role && user.role && user.role.toLowerCase() !== role.toLowerCase()) {
     return <Navigate to="/" replace />;
   }
 

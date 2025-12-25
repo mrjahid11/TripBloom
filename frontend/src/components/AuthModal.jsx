@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import axios from 'axios';
 import { FaTimes, FaGoogle, FaFacebook, FaEnvelope, FaLock, FaUser } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const AuthModal = ({ isOpen, onClose }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -17,6 +18,7 @@ const AuthModal = ({ isOpen, onClose }) => {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+    const { setUser } = useAuth();
 
   if (!isOpen) return null;
 
@@ -56,6 +58,8 @@ const AuthModal = ({ isOpen, onClose }) => {
               localStorage.setItem('userRole', rolesLower[0]);
             }
           }
+            // update auth context with minimal user
+            setUser({ id: user._id, name: user.fullName, role: localStorage.getItem('userRole') });
           const roles = Array.isArray(user.roles) ? user.roles : [user.roles];
           const rolesLower = roles.map(r => r.toLowerCase());
           if (rolesLower.includes('admin')) {

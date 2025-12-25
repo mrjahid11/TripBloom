@@ -86,6 +86,46 @@ export async function unsavePackageController(req, res) {
     res.status(500).json({ success: false, message: 'Server error', error: err.message });
   }
 }
+
+import { getUserById, updateProfile, changePassword } from '../service/user.service.js';
+
+export async function getUserController(req, res) {
+  const { userId } = req.params;
+  try {
+    const result = await getUserById({ userId });
+    if (result.error) return res.status(404).json({ success: false, message: result.error });
+    res.json({ success: true, user: result.user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
+
+export async function updateProfileController(req, res) {
+  const { userId } = req.params;
+  const { fullName, phone } = req.body;
+  try {
+    const result = await updateProfile({ userId, fullName, phone });
+    if (result.error) return res.status(404).json({ success: false, message: result.error });
+    res.json({ success: true, message: 'Profile updated successfully.', user: result.user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
+
+export async function changePasswordController(req, res) {
+  const { userId } = req.params;
+  const { currentPassword, newPassword } = req.body;
+  try {
+    const result = await changePassword({ userId, currentPassword, newPassword });
+    if (result.error) {
+      const status = result.error === 'Current password is incorrect.' ? 401 : 400;
+      return res.status(status).json({ success: false, message: result.error });
+    }
+    res.json({ success: true, message: 'Password changed successfully.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
 import { User } from '../model/user.model.js';
 // Get all users (for testing/demo only)
 export async function getAllUsersController(req, res) {

@@ -7,8 +7,8 @@ import {
   FaExclamationTriangle, FaPercentage, FaChartLine
 } from 'react-icons/fa';
 
-const PackageDetailModal = ({ isOpen, onClose, packageData, onEdit }) => {
-  const [activeTab, setActiveTab] = useState('overview'); // overview, destinations, bookings, departures
+const PackageDetailModal = ({ isOpen, onClose, packageData, onEdit, initialTab }) => {
+  const [activeTab, setActiveTab] = useState(initialTab || 'overview'); // overview, destinations, bookings, departures
   const [bookings, setBookings] = useState([]);
   const [departures, setDepartures] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -22,6 +22,11 @@ const PackageDetailModal = ({ isOpen, onClose, packageData, onEdit }) => {
       }
     }
   }, [isOpen, packageData, activeTab]);
+
+  // respond to changes in initialTab when modal is opened
+  useEffect(() => {
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialTab]);
 
   const fetchBookings = async () => {
     setLoading(true);

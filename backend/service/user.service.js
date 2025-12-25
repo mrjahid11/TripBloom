@@ -125,3 +125,39 @@ export async function unsavePackageForUser({ userId, packageId }) {
   await user.save();
   return { success: true };
 }
+
+// Get user by ID
+export async function getUserById({ userId }) {
+  const user = await User.findById(userId, '-passwordHash');
+  if (!user) return { error: 'User not found.' };
+  return { user };
+}
+
+// Update own profile (customer/operator)
+export async function updateProfile({ userId, fullName, phone }) {
+  const update = {};
+  if (fullName) update.fullName = fullName;
+  if (phone !== undefined) update.phone = phone;
+  const user = await User.findByIdAndUpdate(userId, update, { new: true, fields: '-passwordHash' });
+  if (!user) return { error: 'User not found.' };
+  return { user };
+}
+
+// Change password
+export async function changePassword({ userId, currentPassword, newPassword }) {
+  if (!currentPassword || !newPassword) {
+    return { error: 'Current password and new password are required.' };
+  }
+  const user = await User.findById(userId);
+  if (!user) return { error: 'User not found.' };
+  
+  // Verify current password
+  if (user.passwordHash !== currentPassword) {
+    return { error: 'Current password is incorrect.' };
+  }
+  
+  // Update password
+  user.passwordHash = newPassword;
+  await user.save();
+  return { success: true };
+}

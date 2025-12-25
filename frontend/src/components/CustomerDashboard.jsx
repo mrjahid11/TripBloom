@@ -1,27 +1,72 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FaPlane, FaHeart, FaHistory, FaUser, FaSignOutAlt, FaMapMarkedAlt, FaCalendarAlt, FaStar } from 'react-icons/fa';
+import Bookings from './Bookings';
+import { getBookingsForCustomer } from './bookings.service';
+import { useAuth } from '../context/AuthContext';
+import CustomerPackageModal from './CustomerPackageModal';
+import MapModal from './MapModal';
+import BookingDetailModal from './BookingDetailModal';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
-  // Get user's name from localStorage or props (to be implemented with auth)
-  const userName = localStorage.getItem('userName') || 'Traveler';
+  // Get user's name from auth context or localStorage
+  const { user, logout } = useAuth();
+  const userName = (user && user.name) || localStorage.getItem('userName') || 'Traveler';
   const firstName = userName.split(' ')[0];
-  
-  const upcomingTrips = [
-    {
-      destination: 'Paris, France',
-      date: 'Dec 15-20, 2025',
-      image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400',
-      status: 'Confirmed',
-    },
-    {
-      destination: 'Tokyo, Japan',
-      date: 'Jan 5-12, 2026',
-      image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400',
-      status: 'Pending',
-    },
-  ];
+  const [upcomingTrips, setUpcomingTrips] = React.useState([]);
+  const [loadingTrips, setLoadingTrips] = React.useState(true);
+  const [packageModalOpen, setPackageModalOpen] = React.useState(false);
+  const [packageModalData, setPackageModalData] = React.useState(null);
+  const [packageModalTab, setPackageModalTab] = React.useState('overview');
+  const [mapOpen, setMapOpen] = React.useState(false);
+  const [mapCoords, setMapCoords] = React.useState(null);
+  const [mapTitle, setMapTitle] = React.useState('');
+  const [bookingModalOpen, setBookingModalOpen] = React.useState(false);
+  const [bookingModalData, setBookingModalData] = React.useState(null);
+  const [tripsError, setTripsError] = React.useState(null);
+
+  React.useEffect(() => {
+    const load = async () => {
+      const userId = (user && user.id) || localStorage.getItem('userId');
+      if (!userId) {
+        setUpcomingTrips([]);
+        setLoadingTrips(false);
+        return;
+      }
+
+      setLoadingTrips(true);
+      setTripsError(null);
+      const res = await getBookingsForCustomer(userId);
+      console.debug('[CustomerDashboard] bookings API response:', res);
+      let bookings = [];
+      if (Array.isArray(res)) bookings = res;
+      else if (res && res.success && res.bookings) bookings = res.bookings;
+      else if (res && res.message) setTripsError(res.message);
+
+      // Filter upcoming (startDate in future) and non-cancelled
+      const now = new Date();
+      const upcoming = bookings.filter(b => {
+        const sd = b.startDate ? new Date(b.startDate) : null;
+        return b.status !== 'CANCELLED' && (!sd || sd >= now) ;
+      }).map(b => ({
+        id: b._id || b.id,
+        // backend populates package under `packageId`
+        destination: b.packageId?.destination || b.packageId?.title || b.package?.destination || b.package?.title || b.packageTitle || 'Package',
+        startDate: b.startDate,
+        endDate: b.endDate,
+        dateLabel: b.startDate ? `${new Date(b.startDate).toLocaleDateString()}${b.endDate ? ' - ' + new Date(b.endDate).toLocaleDateString() : ''}` : 'TBD',
+        image: b.packageId?.photos?.[0] || b.package?.image || `https://source.unsplash.com/featured/?${encodeURIComponent((b.packageId?.destination || b.package?.destination || 'travel'))}`,
+        status: b.status || 'PENDING',
+        booking: b
+      }));
+
+      setUpcomingTrips(upcoming);
+      console.debug('[CustomerDashboard] mapped upcomingTrips:', upcoming);
+      setLoadingTrips(false);
+    };
+    load();
+  }, [user]);
 
   const [savedTours, setSavedTours] = useState([]);
 
@@ -62,8 +107,7 @@ const CustomerDashboard = () => {
             </div>
             <button 
               onClick={() => {
-                localStorage.removeItem('userName');
-                localStorage.removeItem('userRole');
+                logout();
                 navigate('/');
               }}
               className="flex items-center space-x-2 px-6 py-3 bg-white/20 backdrop-blur-md rounded-xl hover:bg-white/30 transition-all"
@@ -81,7 +125,6 @@ const CustomerDashboard = () => {
           {[
             { icon: FaPlane, label: 'My Trips', active: true, path: '/customer' },
             { icon: FaStar, label: 'My Reviews', active: false, path: '/customer/reviews' },
-            { icon: FaHeart, label: 'Saved Tours', active: false, path: '/customer/saved' },
             { icon: FaHistory, label: 'History', active: false, path: '/customer/history' },
             { icon: FaUser, label: 'Profile', active: false, path: '/customer/profile' },
           ].map((tab, index) => (
@@ -107,45 +150,149 @@ const CustomerDashboard = () => {
             Upcoming Trips
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {upcomingTrips.map((trip, index) => (
-              <div
-                key={index}
-                className="group relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1"
-              >
-                <div className="relative h-48 overflow-hidden">
-                  <img
-                    src={trip.image}
-                    alt={trip.destination}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                  <div className="absolute bottom-4 left-4 text-white">
-                    <h3 className="text-2xl font-bold">{trip.destination}</h3>
-                    <p className="text-green-200 flex items-center mt-1">
-                      <FaCalendarAlt className="mr-2" />
-                      {trip.date}
-                    </p>
+            {loadingTrips ? (
+              <p>Loading upcoming trips…</p>
+            ) : tripsError ? (
+              <p className="text-red-600">{tripsError}</p>
+            ) : upcomingTrips.length === 0 ? (
+              <p className="text-gray-600">You have no upcoming trips.</p>
+            ) : (
+              upcomingTrips.map((trip, index) => (
+                <div
+                  key={trip.id || index}
+                  className="group relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden hover:shadow-2xl transition-all transform hover:-translate-y-1"
+                >
+                  <div className="relative h-48 overflow-hidden">
+                    <img
+                      src={trip.image || `https://source.unsplash.com/featured/?${encodeURIComponent(trip.destination || 'travel')}`}
+                      alt={trip.destination}
+                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `https://source.unsplash.com/featured/?${encodeURIComponent(trip.destination || 'travel')}`; }}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                    <div className="absolute bottom-4 left-4 text-white">
+                      <h3 className="text-2xl font-bold">{trip.destination}</h3>
+                      <p className="text-green-200 flex items-center mt-1">
+                        <FaCalendarAlt className="mr-2" />
+                        {trip.dateLabel}
+                      </p>
+                    </div>
+                    <span className={`absolute top-4 right-4 px-3 py-1 rounded-full text-sm font-semibold ${
+                      (trip.status && trip.status.toString().toUpperCase() === 'CONFIRMED') ? 'bg-green-500 text-white' : 'bg-yellow-400 text-gray-900'
+                    }`}>
+                      {trip.status}
+                    </span>
                   </div>
-                  <span className={`absolute top-4 right-4 px-3 py-1 rounded-full text-sm font-semibold ${
-                    trip.status === 'Confirmed' ? 'bg-green-500 text-white' : 'bg-yellow-400 text-gray-900'
-                  }`}>
-                    {trip.status}
-                  </span>
-                </div>
-                <div className="p-6">
-                  <div className="flex space-x-3">
-                    <button className="flex-1 bg-primary text-white py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold">
-                      View Details
-                    </button>
-                    <button className="px-4 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                      <FaMapMarkedAlt className="text-primary" />
-                    </button>
+                  <div className="p-6">
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => {
+                          // open package detail modal (prefer populated packageId)
+                          const pkg = trip.booking?.packageId || trip.booking?.package || trip;
+                          setPackageModalData(pkg);
+                          setPackageModalTab('overview');
+                          setPackageModalOpen(true);
+                        }}
+                        className="flex-1 bg-primary text-white py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                      >
+                        View Details
+                      </button>
+                      <button
+                        onClick={() => {
+                          // attempt to open a map view focused on package coordinates
+                          const pkg = trip.booking?.packageId || trip.booking?.package || trip;
+                          console.log('[Map Button] Package data:', pkg);
+                          console.log('[Map Button] Destinations:', pkg.destinations);
+                          
+                          // Fallback coordinates for common Bangladesh destinations
+                          const destinationCoords = {
+                            'sajek valley': { lat: 23.3817, lng: 92.2938, zoom: 13 },
+                            'bandarban': { lat: 22.1953, lng: 92.2184, zoom: 12 },
+                            'cox\'s bazar': { lat: 21.4272, lng: 92.0058, zoom: 12 },
+                            'coxs bazar': { lat: 21.4272, lng: 92.0058, zoom: 12 },
+                            'rangamati': { lat: 22.6533, lng: 92.1753, zoom: 12 },
+                            'sylhet': { lat: 24.8949, lng: 91.8687, zoom: 12 },
+                            'sundarbans': { lat: 21.9497, lng: 89.1833, zoom: 11 },
+                            'kuakata': { lat: 21.8167, lng: 90.1167, zoom: 13 },
+                            'srimangal': { lat: 24.3065, lng: 91.7296, zoom: 13 },
+                            'saint martin': { lat: 20.6274, lng: 92.3233, zoom: 14 },
+                            'dhaka': { lat: 23.8103, lng: 90.4125, zoom: 11 }
+                          };
+                          
+                          // Try to find coordinates from destinations array
+                          let coords = null;
+                          if (pkg.destinations && Array.isArray(pkg.destinations)) {
+                            // Look for main destination (skip first if it's departure city like Dhaka)
+                            const mainDest = pkg.destinations.find((d, idx) => idx > 0 && d.name) || pkg.destinations[0];
+                            if (mainDest && mainDest.name) {
+                              const destName = mainDest.name.toLowerCase();
+                              const cityName = mainDest.city?.toLowerCase();
+                              
+                              // Try exact match first
+                              coords = destinationCoords[destName] || destinationCoords[cityName];
+                              
+                              // Try partial match
+                              if (!coords) {
+                                for (const [key, value] of Object.entries(destinationCoords)) {
+                                  if (destName.includes(key) || key.includes(destName) || 
+                                      (cityName && (cityName.includes(key) || key.includes(cityName)))) {
+                                    coords = value;
+                                    break;
+                                  }
+                                }
+                              }
+                              
+                              if (coords) {
+                                coords.label = mainDest.name;
+                              }
+                            }
+                          }
+                          
+                          console.log('[Map Button] Found coords:', coords);
+                          if (coords) {
+                            setMapCoords(coords);
+                            setMapTitle(coords.label || pkg.title || trip.destination || 'Location');
+                            setMapOpen(true);
+                            return;
+                          }
+
+                          console.log('[Map Button] No coords found, opening package modal');
+                          // fallback: open the package modal on destinations tab
+                          setPackageModalData(pkg);
+                          setPackageModalTab('destinations');
+                          setPackageModalOpen(true);
+                        }}
+                        className="px-4 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <FaMapMarkedAlt className="text-primary" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
+
+        {packageModalOpen && packageModalData && (
+          <CustomerPackageModal
+            isOpen={packageModalOpen}
+            onClose={() => setPackageModalOpen(false)}
+            packageData={packageModalData}
+            initialTab={packageModalTab}
+          />
+        )}
+
+        {bookingModalOpen && bookingModalData && (
+          <BookingDetailModal booking={bookingModalData} onClose={() => setBookingModalOpen(false)} onUpdate={(u) => {}} />
+        )}
+
+        {mapOpen && (
+          <MapModal isOpen={mapOpen} onClose={() => setMapOpen(false)} coords={mapCoords} title={mapTitle} />
+        )}
+
+        {/* Bookings (from backend) */}
+        <Bookings />
 
         {/* Saved Tours */}
         <div>

@@ -2,6 +2,47 @@
 import Booking from '../model/booking.model.js';
 import { TourPackage } from '../model/tourPackage.model.js';
 import { GroupDeparture } from '../model/groupDeparture.model.js';
+import { User } from '../model/user.model.js';
+
+// Check and cancel unpaid bookings that have passed start date
+export async function cancelUnpaidExpiredBookings() {
+  const now = new Date();
+  
+  // Find bookings that:
+  // 1. Have started (startDate <= now)
+  // 2. Are not cancelled
+  // 3. Are not fully paid
+  const bookings = await Booking.find({
+    startDate: { $lte: now },
+    status: { $in: ['PENDING', 'CONFIRMED'] },
+    'cancellation.isCancelled': false
+  });
+
+  const cancelledBookings = [];
+  
+  for (const booking of bookings) {
+    const totalPaid = booking.payments
+      .filter(p => p.status === 'SUCCESS' || p.status === 'COMPLETED' || p.status === 'CONFIRMED')
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    
+    // If not fully paid, cancel the booking
+    if (totalPaid < booking.totalAmount) {
+      booking.status = 'CANCELLED';
+      booking.cancellation = {
+        isCancelled: true,
+        reason: 'Tour started without full payment',
+        cancelledAt: new Date(),
+        refundAmount: totalPaid // Refund any partial payments
+      };
+      await booking.save();
+      cancelledBookings.push(booking);
+      
+      // TODO: Send email/notification to customer about cancellation
+    }
+  }
+  
+  return { cancelledCount: cancelledBookings.length, bookings: cancelledBookings };
+}
 
 // Create a new booking
 export async function createBooking({ 
@@ -103,7 +144,7 @@ export async function createBooking({
     await booking.save();
 
     // Populate references for response
-    await booking.populate('customerId', 'name email phone');
+    await booking.populate('customerId', 'fullName name email phone');
     await booking.populate('packageId', 'title destination type category');
     if (groupDepartureId) {
       await booking.populate('groupDepartureId', 'startDate endDate totalSeats bookedSeats pricePerPerson');
@@ -120,8 +161,8 @@ export async function createBooking({
 export async function getBookingById(bookingId) {
   try {
     const booking = await Booking.findById(bookingId)
-      .populate('customerId', 'name email phone')
-      .populate('packageId', 'title destination type category basePrice')
+      .populate('customerId', 'fullName name email phone')
+      .populate('packageId') // Populate all package fields
       .populate('groupDepartureId', 'startDate endDate totalSeats bookedSeats pricePerPerson');
 
     if (!booking) {
@@ -169,8 +210,8 @@ export async function listBookings({
     }
 
     const bookings = await Booking.find(filter)
-      .populate('customerId', 'name email phone')
-      .populate('packageId', 'title destination type category basePrice')
+      .populate('customerId', 'fullName name email phone')
+      .populate('packageId') // Populate all package fields for customer dashboard
       .populate('groupDepartureId', 'startDate endDate totalSeats bookedSeats pricePerPerson')
       .sort({ createdAt: -1 });
 

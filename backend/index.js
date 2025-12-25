@@ -22,7 +22,7 @@ import { ROLES, User } from './model/user.model.js';
 // Remove username index if it exists (for migration from old schema)
 User.collection.dropIndex('username_1').catch(() => {});
 
-import { signupController, loginController, requireRole, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController, getSavedPackagesController, savePackageController, unsavePackageController } from './controller/user.controller.js';
+import { signupController, loginController, requireRole, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController, getSavedPackagesController, savePackageController, unsavePackageController, getUserController, updateProfileController, changePasswordController } from './controller/user.controller.js';
 import { getOperatorDashboardController, getOperatorProfileController, updateOperatorProfileController } from './controller/operator.controller.js';
 
 
@@ -68,6 +68,11 @@ app.get('/api/admin/users', listUsersController); // List users with filters
 app.post('/api/admin/users', createUserController); // Create user
 app.put('/api/admin/users/:userId', updateUserController); // Update user info
 app.delete('/api/admin/users/:userId', deactivateUserController); // Deactivate user
+
+// User profile routes
+app.get('/api/users/:userId', getUserController); // Get user by ID
+app.put('/api/users/:userId', updateProfileController); // Update own profile
+app.put('/api/users/:userId/password', changePasswordController); // Change password
 
 import { createTourPackageController, updateTourPackageController, setTourPackageActiveController, getTourPackageController, listTourPackagesController, searchTourPackagesController, deleteTourPackageController } from './controller/tourPackage.controller.js';
 // ...existing code...
@@ -131,7 +136,8 @@ import {
   cancelBookingController,
   addPaymentController,
   getCustomerStatsController,
-  completeBookingController
+  completeBookingController,
+  cancelUnpaidBookingsController
 } from './controller/booking.controller.js';
 app.post('/api/bookings', createBookingController); // Create booking
 app.get('/api/bookings/:bookingId', getBookingByIdController); // Get booking by ID
@@ -141,6 +147,7 @@ app.post('/api/bookings/:bookingId/cancel', cancelBookingController); // Cancel 
 app.post('/api/bookings/:bookingId/payment', addPaymentController); // Add payment
 app.get('/api/customers/:customerId/stats', getCustomerStatsController); // Customer stats
 app.post('/api/bookings/:bookingId/complete', completeBookingController); // Mark booking complete
+app.post('/api/admin/bookings/cancel-unpaid', cancelUnpaidBookingsController); // Cancel unpaid expired bookings
 
 // Review endpoints (customer)
 import {
