@@ -14,6 +14,8 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [isCustomBooking, setIsCustomBooking] = useState(false);
   const [userRewardPoints, setUserRewardPoints] = useState(0);
+  const [availableDepartures, setAvailableDepartures] = useState([]);
+  const [selectedDepartureId, setSelectedDepartureId] = useState('');
   const [bookingData, setBookingData] = useState({
     numTravelers: 1,
     startDate: '',
@@ -60,6 +62,11 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
       };
       fetchRewardPoints();
       
+      // Fetch available departures for GROUP packages
+      if (packageData.type === 'GROUP') {
+        fetchAvailableDepartures();
+      }
+      
       return () => {
         // Restore scroll position without jump
         const scrollY = document.body.style.top;
@@ -73,6 +80,33 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
   }, [isOpen]);
 
   if (!isOpen || !packageData) return null;
+
+  const fetchAvailableDepartures = async () => {
+    try {
+      const res = await axios.get('/api/admin/group-departures', {
+        params: { 
+          packageId: packageData._id,
+          status: 'OPEN'
+        }
+      });
+      
+      if (res.data.departures) {
+        // Filter future departures with available seats and sort by start date
+        const futureDepartures = res.data.departures
+          .filter(dep => {
+            const hasAvailableSeats = dep.bookedSeats < dep.totalSeats;
+            const isFuture = new Date(dep.startDate) > new Date();
+            return hasAvailableSeats && isFuture;
+          })
+          .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+        
+        setAvailableDepartures(futureDepartures);
+      }
+    } catch (err) {
+      console.error('Failed to fetch available departures:', err);
+      setAvailableDepartures([]);
+    }
+  };
 
   // Get images based on destinations
   const getPackageImages = () => {
@@ -126,7 +160,12 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
 
   const handleBooking = async () => {
     // Validation
-    if (!bookingData.startDate) {
+    if (packageData.type === 'GROUP' && !selectedDepartureId) {
+      alert('Please select a departure date for this group tour.');
+      return;
+    }
+    
+    if (packageData.type !== 'GROUP' && !bookingData.startDate) {
       alert('Please select a start date for your tour.');
       return;
     }
@@ -154,11 +193,25 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
     }
 
     try {
-      // Calculate end date based on package duration
-      const startDate = new Date(bookingData.startDate);
-      const durationDays = packageData.duration || 3; // Default 3 days if not specified
-      const endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + durationDays);
+      // Get start and end dates
+      let startDate, endDate;
+      
+      if (packageData.type === 'GROUP') {
+        // For GROUP tours, use the selected departure's dates
+        const selectedDeparture = availableDepartures.find(dep => dep._id === selectedDepartureId);
+        if (!selectedDeparture) {
+          alert('Selected departure not found. Please try again.');
+          return;
+        }
+        startDate = new Date(selectedDeparture.startDate);
+        endDate = new Date(selectedDeparture.endDate);
+      } else {
+        // For PERSONAL tours, calculate end date based on package duration
+        startDate = new Date(bookingData.startDate);
+        const durationDays = packageData.duration || 3;
+        endDate = new Date(startDate);
+        endDate.setDate(startDate.getDate() + durationDays);
+      }
 
       // Build travelers array
       let travelers = [];
@@ -235,6 +288,11 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
         customizations: customizationText,
         pointsToUse: bookingData.pointsToUse || 0
       };
+      
+      // Add groupDepartureId for GROUP bookings
+      if (packageData.type === 'GROUP') {
+        bookingPayload.groupDepartureId = selectedDepartureId;
+      }
 
       const response = await axios.post('/api/bookings', bookingPayload);
       
@@ -242,6 +300,7 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
         alert('Booking request submitted successfully! You can view and manage your booking in the dashboard.');
         setShowBookingForm(false);
         setIsCustomBooking(false);
+        setSelectedDepartureId('');
         setBookingData({ 
           numTravelers: 1, 
           startDate: '', 
@@ -715,19 +774,60 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                         </div>
                       )}
 
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                          Preferred Start Date <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="date"
-                          value={bookingData.startDate}
-                          onChange={(e) => setBookingData({...bookingData, startDate: e.target.value})}
-                          min={new Date().toISOString().split('T')[0]}
-                          required
-                          className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white"
-                        />
-                      </div>
+                      {/* Departure Selection for GROUP tours OR Date Selection for PERSONAL tours */}
+                      {packageData.type === 'GROUP' ? (
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            Select Departure Date <span className="text-red-500">*</span>
+                          </label>
+                          {availableDepartures.length > 0 ? (
+                            <select
+                              value={selectedDepartureId}
+                              onChange={(e) => setSelectedDepartureId(e.target.value)}
+                              required
+                              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white"
+                            >
+                              <option value="">-- Select a departure --</option>
+                              {availableDepartures.map((departure) => {
+                                const startDate = new Date(departure.startDate).toLocaleDateString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric', 
+                                  year: 'numeric' 
+                                });
+                                const endDate = new Date(departure.endDate).toLocaleDateString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric', 
+                                  year: 'numeric' 
+                                });
+                                const availableSeats = departure.totalSeats - departure.bookedSeats;
+                                return (
+                                  <option key={departure._id} value={departure._id}>
+                                    {startDate} to {endDate} ({availableSeats} seats available)
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          ) : (
+                            <div className="w-full px-4 py-3 border border-yellow-300 dark:border-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm">
+                              No available departures at the moment. Please contact us for more information.
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            Preferred Start Date <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="date"
+                            value={bookingData.startDate}
+                            onChange={(e) => setBookingData({...bookingData, startDate: e.target.value})}
+                            min={new Date().toISOString().split('T')[0]}
+                            required
+                            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white"
+                          />
+                        </div>
+                      )}
 
                       {/* Customization Options - Only show if this is a custom booking */}
                       {isCustomBooking && (

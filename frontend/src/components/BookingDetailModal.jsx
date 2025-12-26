@@ -308,28 +308,47 @@ const BookingDetailModal = ({ booking, onClose, onUpdate }) => {
                 </div>
               </button>
 
-              {/* Option 2: Request Date Change */}
-              <button
-                onClick={handleDateChangeRequest}
-                disabled={requestingDateChange}
-                className="w-full p-4 border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="flex items-start">
-                  <div className="flex-shrink-0 text-blue-500 text-2xl mr-3">📅</div>
-                  <div className="flex-1">
-                    <h4 className="font-bold text-gray-900 dark:text-white mb-1">
-                      {requestingDateChange ? 'Submitting...' : 'Request Date Change'}
-                    </h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Keep your booking and request to change your travel dates.
-                      Subject to availability and approval.
-                    </p>
-                    <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-semibold">
-                      ✓ No cancellation fees
-                    </p>
+              {/* Option 2: Request Date Change - Only available for PRIVATE and CUSTOM bookings */}
+              {booking.bookingType !== 'GROUP' && (
+                <button
+                  onClick={handleDateChangeRequest}
+                  disabled={requestingDateChange}
+                  className="w-full p-4 border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 text-blue-500 text-2xl mr-3">📅</div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-gray-900 dark:text-white mb-1">
+                        {requestingDateChange ? 'Submitting...' : 'Request Date Change'}
+                      </h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Keep your booking and request to change your travel dates.
+                        Subject to availability and approval.
+                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 font-semibold">
+                        ✓ No cancellation fees
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              )}
+
+              {/* Info message for GROUP bookings */}
+              {booking.bookingType === 'GROUP' && (
+                <div className="w-full p-4 border-2 border-gray-300 bg-gray-50 dark:bg-gray-700/50 dark:border-gray-600 rounded-lg">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0 text-gray-400 text-2xl mr-3">ℹ️</div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-1">
+                        Group Tour - Fixed Schedule
+                      </h4>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Group tours have fixed departure dates. To change dates, you would need to cancel this booking and book a different departure.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </button>
+              )}
             </div>
 
             {/* Cancel Button */}

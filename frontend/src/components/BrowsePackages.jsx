@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { FaSearch, FaFilter, FaStar, FaClock, FaDollarSign, FaMapMarkerAlt, FaUsers, FaUser, FaHeart, FaRegHeart } from 'react-icons/fa';
+import { FaSearch, FaFilter, FaStar, FaClock, FaDollarSign, FaMapMarkerAlt, FaUsers, FaUser, FaHeart, FaRegHeart, FaCalendarCheck } from 'react-icons/fa';
 import TourDetailModal from './TourDetailModal';
 
 const BrowsePackages = () => {
@@ -14,6 +14,7 @@ const BrowsePackages = () => {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [savedPackageIds, setSavedPackageIds] = useState(new Set());
+  const [groupDepartures, setGroupDepartures] = useState({});
 
   console.log('[BrowsePackages] Component rendered, searchParams:', Object.fromEntries(searchParams.entries()));
 
@@ -96,12 +97,51 @@ const BrowsePackages = () => {
       if (response.data.success) {
         setPackages(response.data.packages);
         console.log('[BrowsePackages] Loaded packages:', response.data.packages.length);
+        
+        // Fetch upcoming departures for GROUP packages
+        await fetchGroupDepartures(response.data.packages);
       }
     } catch (error) {
       console.error('[BrowsePackages] Failed to fetch packages:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchGroupDepartures = async (pkgs) => {
+    const groupPackages = pkgs.filter(pkg => pkg.type === 'GROUP');
+    if (groupPackages.length === 0) return;
+
+    const departuresData = {};
+    
+    // Fetch departures for each GROUP package
+    await Promise.all(
+      groupPackages.map(async (pkg) => {
+        try {
+          const res = await axios.get('/api/admin/group-departures', {
+            params: { 
+              packageId: pkg._id,
+              status: 'OPEN'
+            }
+          });
+          
+          if (res.data.departures && res.data.departures.length > 0) {
+            // Filter future departures and sort by start date
+            const futureDepartures = res.data.departures
+              .filter(dep => new Date(dep.startDate) > new Date())
+              .sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+            
+            if (futureDepartures.length > 0) {
+              departuresData[pkg._id] = futureDepartures;
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to fetch departures for package ${pkg._id}:`, err);
+        }
+      })
+    );
+    
+    setGroupDepartures(departuresData);
   };
 
   const handleSearch = (e) => {
@@ -171,6 +211,16 @@ const BrowsePackages = () => {
       .filter(Boolean)
       .slice(0, 3)
       .join(', ') + (destinations.length > 3 ? '...' : '');
+  };
+
+  // Format departure date for display
+  const formatDepartureDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
   };
 
   return (
@@ -363,10 +413,65 @@ const BrowsePackages = () => {
                   )}
 
                   {/* Duration */}
-                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-3">
                     <FaClock className="mr-2 text-primary" />
                     <span>{pkg.defaultDays} Days / {pkg.defaultNights} Nights</span>
                   </div>
+
+                  {/* Upcoming Departures for GROUP tours */}
+                  {pkg.type === 'GROUP' && (
+                    <div className="mb-4">
+                      <div className="flex items-center text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">
+                        <FaCalendarCheck className="mr-2" />
+                        Upcoming Departures:
+                      </div>
+                      {groupDepartures[pkg._id] && groupDepartures[pkg._id].length > 0 ? (
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 rounded-lg p-3 space-y-2 border border-blue-200 dark:border-blue-700">
+                          {groupDepartures[pkg._id].slice(0, 3).map((departure, idx) => {
+                            const availableSeats = departure.totalSeats - departure.bookedSeats;
+                            const isAlmostFull = availableSeats <= 5 && availableSeats > 0;
+                            const isFull = availableSeats <= 0;
+                            
+                            return (
+                              <div key={departure._id} className="flex items-center justify-between bg-white dark:bg-gray-800 rounded px-3 py-2 shadow-sm">
+                                <div className="flex-1">
+                                  <div className="text-sm font-bold text-gray-900 dark:text-white">
+                                    {formatDepartureDate(departure.startDate)}
+                                  </div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                                    {departure.endDate && `to ${formatDepartureDate(departure.endDate)}`}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className={`text-xs font-semibold ${
+                                    isFull ? 'text-red-600 dark:text-red-400' :
+                                    isAlmostFull ? 'text-orange-600 dark:text-orange-400' :
+                                    'text-green-600 dark:text-green-400'
+                                  }`}>
+                                    {isFull ? 'FULL' : `${availableSeats} seats`}
+                                  </div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                                    {departure.totalSeats} total
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {groupDepartures[pkg._id].length > 3 && (
+                            <div className="text-xs text-center text-blue-600 dark:text-blue-400 font-semibold pt-1">
+                              +{groupDepartures[pkg._id].length - 3} more departure{groupDepartures[pkg._id].length - 3 > 1 ? 's' : ''} available
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 border border-yellow-200 dark:border-yellow-700">
+                          <p className="text-xs text-yellow-700 dark:text-yellow-400 text-center">
+                            No upcoming departures scheduled yet. Contact us for custom dates.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Price */}
                   <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
