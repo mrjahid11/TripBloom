@@ -7,6 +7,7 @@ import MyBookings from '../operator/MyBookings';
 import ItinerariesManager from '../operator/ItinerariesManager';
 import MessagesAnnouncements from '../operator/MessagesAnnouncements';
 import OperatorProfile from '../operator/OperatorProfile';
+import NotificationCenter from './NotificationCenter';
 
 const OperatorDashboard = () => {
   const navigate = useNavigate();
@@ -19,9 +20,9 @@ const OperatorDashboard = () => {
     { id: 'dashboard', icon: FaHome, label: 'Dashboard' },
     { id: 'departures', icon: FaBus, label: 'My Departures' },
     { id: 'bookings', icon: FaBook, label: 'My Bookings' },
-    { id: 'itineraries', icon: FaClipboardList, label: 'Itineraries & Checklists' },
+    { id: 'itineraries', icon: FaClipboardList, label: 'Checklists' },
     { id: 'messages', icon: FaComments, label: 'Messages' },
-    { id: 'profile', icon: FaUser, label: 'Profile & Availability' }
+    { id: 'profile', icon: FaUser, label: 'Profile' }
   ];
 
   const renderContent = () => {
@@ -104,9 +105,19 @@ const OperatorDashboard = () => {
                 {menuItems.find(m => m.id === activeView)?.label || 'Dashboard'}
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Current Rating</p>
-              <p className="text-3xl font-bold text-orange-600">4.9 ⭐</p>
+            <div className="flex items-center space-x-4">
+              <NotificationCenter
+                userId={localStorage.getItem('userId')}
+                userRole="TOUR_OPERATOR"
+                onOpenChat={() => {
+                  // Switch to messages view when notification is clicked
+                  setActiveView('messages');
+                }}
+              />
+              <div className="text-right">
+                <p className="text-sm text-gray-600 dark:text-gray-400">Current Rating</p>
+                <p className="text-3xl font-bold text-orange-600">4.9 ⭐</p>
+              </div>
             </div>
           </div>
         </div>

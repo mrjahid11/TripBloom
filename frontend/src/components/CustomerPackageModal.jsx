@@ -20,6 +20,16 @@ const CustomerPackageModal = ({ isOpen, onClose, packageData, initialTab = 'over
   const pkg = resolvedPkg || packageData.packageId || packageData;
   console.debug('[CustomerPackageModal] packageData:', packageData, 'using pkg:', pkg, 'resolvedPkg:', resolvedPkg);
 
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = 'unset';
+      };
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     let mounted = true;
     const tryFetch = async () => {
@@ -54,8 +64,8 @@ const CustomerPackageModal = ({ isOpen, onClose, packageData, initialTab = 'over
   const destinations = pkg.destinations || packageData.destinations || [];
 
   const modal = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-3xl p-6 overflow-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6">
         <div className="flex justify-between items-start">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h2>

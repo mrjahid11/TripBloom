@@ -15,6 +15,7 @@ const CustomerProfile = () => {
     fullName: '',
     email: '',
     phone: '',
+    age: '',
     rewardPoints: 0,
   });
 
@@ -44,6 +45,7 @@ const CustomerProfile = () => {
             fullName: data.user.fullName || '',
             email: data.user.email || '',
             phone: data.user.phone || '',
+            age: data.user.age || '',
             rewardPoints: data.user.rewardPoints || 0,
           });
         }
@@ -74,12 +76,23 @@ const CustomerProfile = () => {
         body: JSON.stringify({
           fullName: profileData.fullName,
           phone: profileData.phone,
+          age: profileData.age && profileData.age !== '' ? parseInt(profileData.age) : null,
         }),
       });
 
       const data = await res.json();
       if (data.success) {
         setMessage('Profile updated successfully!');
+        // Update state with server response to reflect saved values
+        if (data.user) {
+          setProfileData({
+            fullName: data.user.fullName || '',
+            email: data.user.email || profileData.email,
+            phone: data.user.phone || '',
+            age: data.user.age !== undefined && data.user.age !== null ? data.user.age : '',
+            rewardPoints: data.user.rewardPoints || profileData.rewardPoints,
+          });
+        }
         // Update localStorage if name changed
         if (profileData.fullName) {
           localStorage.setItem('userName', profileData.fullName);
@@ -267,6 +280,23 @@ const CustomerProfile = () => {
                   onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:text-white"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <FaUser className="inline mr-2" />
+                  Age
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="120"
+                  value={profileData.age}
+                  onChange={(e) => setProfileData({ ...profileData, age: e.target.value })}
+                  placeholder="Enter your age"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-gray-700 dark:text-white"
+                />
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Your age will be auto-filled when booking tours</p>
               </div>
 
               <div className="flex justify-end">

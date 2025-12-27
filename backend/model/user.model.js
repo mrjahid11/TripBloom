@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   phone: { type: String },
+  age: { type: Number, min: 1, max: 120 },
   passwordHash: { type: String, required: true },
   roles: {
     type: [String],

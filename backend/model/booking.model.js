@@ -216,6 +216,10 @@ const bookingSchema = new mongoose.Schema({
   reservedSeats: {
     type: [String],
     default: []
+  },
+  assignedOperator: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }
 }, {
   timestamps: true

@@ -102,9 +102,9 @@ export async function getUserController(req, res) {
 
 export async function updateProfileController(req, res) {
   const { userId } = req.params;
-  const { fullName, phone } = req.body;
+  const { fullName, phone, age } = req.body;
   try {
-    const result = await updateProfile({ userId, fullName, phone });
+    const result = await updateProfile({ userId, fullName, phone, age });
     if (result.error) return res.status(404).json({ success: false, message: result.error });
     res.json({ success: true, message: 'Profile updated successfully.', user: result.user });
   } catch (err) {

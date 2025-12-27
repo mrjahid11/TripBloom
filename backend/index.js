@@ -1,4 +1,4 @@
-import { sendMessageController, getMessagesController, getBroadcastMessagesController } from './controller/message.controller.js';
+import { sendMessageController, getMessagesController, getBroadcastMessagesController, getBookingMessagesController } from './controller/message.controller.js';
 import { Review } from './model/review.model.js';
 import { TourPackage } from './model/tourPackage.model.js';
 
@@ -30,19 +30,22 @@ import { getOperatorDashboardController, getOperatorProfileController, updateOpe
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-// Messaging endpoints (must be after app is initialized)
+
+// Middleware (MUST be before routes)
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Messaging endpoints
+app.post('/api/messages', sendMessageController); // Send message (supports both booking and tour)
 app.post('/api/messages/send', sendMessageController); // Send message (1-to-1 or broadcast)
 app.get('/api/messages', getMessagesController); // Get messages for a tour or user
+app.get('/api/messages/booking/:bookingId', getBookingMessagesController); // Get messages for a specific booking
 app.get('/api/messages/broadcast', getBroadcastMessagesController); // Get broadcast messages for a tour
 // Operator dashboard endpoint
 app.get('/api/operator/:operatorId/dashboard', getOperatorDashboardController);
 app.get('/api/operator/:operatorId/profile', getOperatorProfileController);
 app.put('/api/operator/:operatorId/profile', updateOperatorProfileController);
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // User signup endpoint
 app.post('/api/signup', signupController);
@@ -54,9 +57,6 @@ app.post('/api/login', loginController);
 app.post('/api/admin-only', requireRole(ROLES.ADMIN), (req, res) => {
   res.json({ success: true, message: 'Welcome, admin!' });
 });
-
-// Routes
-app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.get('/api/health', (req, res) => {

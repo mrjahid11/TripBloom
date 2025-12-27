@@ -16,6 +16,8 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
   const [userRewardPoints, setUserRewardPoints] = useState(0);
   const [availableDepartures, setAvailableDepartures] = useState([]);
   const [selectedDepartureId, setSelectedDepartureId] = useState('');
+  const [isFirstTravelerSelf, setIsFirstTravelerSelf] = useState(false);
+  const [userProfileData, setUserProfileData] = useState(null);
   const [bookingData, setBookingData] = useState({
     numTravelers: 1,
     startDate: '',
@@ -54,6 +56,12 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
             const data = await res.json();
             if (data.success && data.user) {
               setUserRewardPoints(data.user.rewardPoints || 0);
+              // Store user profile data for auto-fill
+              setUserProfileData({
+                fullName: data.user.fullName || '',
+                age: data.user.age || '',
+                phone: data.user.phone || ''
+              });
             }
           } catch (err) {
             console.error('Failed to fetch reward points:', err);
@@ -176,7 +184,11 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
     }
 
     // Validate traveler information
-    if (bookingData.bookingFor === 'others') {
+    // For GROUP tours with multiple travelers, always require full details
+    // For other bookings, only validate if booking for others
+    const requiresAllTravelerDetails = (bookingData.numTravelers > 1 && bookingData.bookingFor === 'self') || bookingData.bookingFor === 'others';
+    
+    if (requiresAllTravelerDetails) {
       for (let i = 0; i < bookingData.numTravelers; i++) {
         const traveler = bookingData.travelers[i];
         if (!traveler || !traveler.fullName || !traveler.age || !traveler.phone) {
@@ -215,7 +227,15 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
 
       // Build travelers array
       let travelers = [];
-      if (bookingData.bookingFor === 'self') {
+      
+      // For GROUP tours with multiple travelers, always use form data
+      if (packageData.type === 'GROUP' && bookingData.numTravelers > 1) {
+        travelers = bookingData.travelers.slice(0, bookingData.numTravelers).map(t => ({
+          fullName: t.fullName,
+          age: parseInt(t.age),
+          phone: t.phone
+        }));
+      } else if (bookingData.bookingFor === 'self') {
         // Get user info from localStorage or context
         const userFullName = localStorage.getItem('userFullName') || 'Customer';
         const userPhone = localStorage.getItem('userPhone') || '';
@@ -575,6 +595,54 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                     </div>
                   </div>
                 )}
+                
+                {/* Tour Operator Information for GROUP tours */}
+                {packageData.type === 'GROUP' && packageData.assignedOperators && packageData.assignedOperators.length > 0 && (
+                  <div>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                      <FaUserTie className="text-primary" />
+                      Tour Operator
+                    </h3>
+                    <div className="space-y-3">
+                      {packageData.assignedOperators.map((operator, index) => (
+                        <div key={index} className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                          <div className="flex items-start gap-4">
+                            <div className="bg-primary text-white p-3 rounded-full">
+                              <FaUserTie className="text-2xl" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-bold text-gray-900 dark:text-white text-lg mb-2">
+                                {operator.fullName || 'Tour Operator'}
+                              </h4>
+                              {operator.phone && (
+                                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                                  <span className="font-semibold">📞 Phone:</span>
+                                  <a 
+                                    href={`tel:${operator.phone}`}
+                                    className="text-primary hover:underline font-medium"
+                                  >
+                                    {operator.phone}
+                                  </a>
+                                </div>
+                              )}
+                              {operator.email && (
+                                <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mt-1">
+                                  <span className="font-semibold">✉️ Email:</span>
+                                  <a 
+                                    href={`mailto:${operator.email}`}
+                                    className="text-primary hover:underline font-medium text-sm"
+                                  >
+                                    {operator.email}
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Sidebar - Booking Card */}
@@ -638,50 +706,52 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                     <div className="space-y-4">
                       <h4 className="font-bold text-gray-900 dark:text-white mb-4">Book Your Adventure</h4>
                       
-                      {/* Booking For Selection */}
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                          Booking For
-                        </label>
-                        <div className="flex gap-4">
-                          <label className="flex items-center cursor-pointer">
-                            <input
-                              type="radio"
-                              name="bookingFor"
-                              value="self"
-                              checked={bookingData.bookingFor === 'self'}
-                              onChange={(e) => setBookingData({
-                                ...bookingData, 
-                                bookingFor: e.target.value,
-                                travelers: [{ fullName: '', age: '', phone: '' }]
-                              })}
-                              className="mr-2"
-                            />
-                            <span className="text-gray-700 dark:text-gray-300">Myself</span>
+                      {/* Booking For Selection - Not shown for GROUP tours */}
+                      {packageData.type !== 'GROUP' && (
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            Booking For
                           </label>
-                          <label className="flex items-center cursor-pointer">
-                            <input
-                              type="radio"
-                              name="bookingFor"
-                              value="others"
-                              checked={bookingData.bookingFor === 'others'}
-                              onChange={(e) => {
-                                const travelers = [];
-                                for (let i = 0; i < bookingData.numTravelers; i++) {
-                                  travelers.push({ fullName: '', age: '', phone: '' });
-                                }
-                                setBookingData({
+                          <div className="flex gap-4">
+                            <label className="flex items-center cursor-pointer">
+                              <input
+                                type="radio"
+                                name="bookingFor"
+                                value="self"
+                                checked={bookingData.bookingFor === 'self'}
+                                onChange={(e) => setBookingData({
                                   ...bookingData, 
                                   bookingFor: e.target.value,
-                                  travelers
-                                });
-                              }}
-                              className="mr-2"
-                            />
-                            <span className="text-gray-700 dark:text-gray-300">Others</span>
-                          </label>
+                                  travelers: [{ fullName: '', age: '', phone: '' }]
+                                })}
+                                className="mr-2"
+                              />
+                              <span className="text-gray-700 dark:text-gray-300">Myself</span>
+                            </label>
+                            <label className="flex items-center cursor-pointer">
+                              <input
+                                type="radio"
+                                name="bookingFor"
+                                value="others"
+                                checked={bookingData.bookingFor === 'others'}
+                                onChange={(e) => {
+                                  const travelers = [];
+                                  for (let i = 0; i < bookingData.numTravelers; i++) {
+                                    travelers.push({ fullName: '', age: '', phone: '' });
+                                  }
+                                  setBookingData({
+                                    ...bookingData, 
+                                    bookingFor: e.target.value,
+                                    travelers
+                                  });
+                                }}
+                                className="mr-2"
+                              />
+                              <span className="text-gray-700 dark:text-gray-300">Others</span>
+                            </label>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -697,27 +767,62 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                             for (let i = 0; i < count; i++) {
                               travelers.push(bookingData.travelers[i] || { fullName: '', age: '', phone: '' });
                             }
+                            // Update travelers array when booking for multiple people or for others
+                            const shouldUpdateTravelers = count > 1 || bookingData.bookingFor === 'others';
                             setBookingData({
                               ...bookingData, 
                               numTravelers: count,
-                              travelers: bookingData.bookingFor === 'others' ? travelers : bookingData.travelers
+                              travelers: shouldUpdateTravelers ? travelers : bookingData.travelers
                             });
                           }}
                           className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white"
                         />
                       </div>
 
-                      {/* Traveler Information for 'others' */}
-                      {bookingData.bookingFor === 'others' && (
+                      {/* Traveler Information for 'others' OR when booking for multiple travelers (PERSONAL or GROUP) */}
+                      {((bookingData.numTravelers > 1 && bookingData.bookingFor === 'self') || bookingData.bookingFor === 'others') && (
                         <div className="space-y-4 max-h-80 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-4">
                           <h5 className="font-semibold text-gray-900 dark:text-white sticky top-0 bg-white dark:bg-gray-800 pb-2">
                             Traveler Details <span className="text-red-500">*</span>
                           </h5>
-                          {Array.from({ length: bookingData.numTravelers }).map((_, index) => (
+                          {Array.from({ length: bookingData.numTravelers }).map((_, index) => {
+                            const handleThisIsMeToggle = (checked) => {
+                              setIsFirstTravelerSelf(checked);
+                              if (checked && userProfileData) {
+                                // Auto-fill first traveler with user's data
+                                const newTravelers = [...bookingData.travelers];
+                                newTravelers[0] = {
+                                  fullName: userProfileData.fullName,
+                                  age: userProfileData.age,
+                                  phone: userProfileData.phone
+                                };
+                                setBookingData({...bookingData, travelers: newTravelers});
+                              }
+                            };
+                            
+                            return (
                             <div key={index} className="border-b border-gray-200 dark:border-gray-700 pb-4 last:border-b-0">
                               <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">
                                 Traveler {index + 1}
                               </p>
+                              
+                              {/* Add "This is me" checkbox for first traveler */}
+                              {index === 0 && (
+                                <div className="mb-3">
+                                  <label className="flex items-center cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={isFirstTravelerSelf}
+                                      onChange={(e) => handleThisIsMeToggle(e.target.checked)}
+                                      className="mr-2 w-4 h-4 text-primary focus:ring-2 focus:ring-primary rounded"
+                                    />
+                                    <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                      ✓ This is me (auto-fill my information)
+                                    </span>
+                                  </label>
+                                </div>
+                              )}
+                              
                               <div className="space-y-2">
                                 <input
                                   type="text"
@@ -731,7 +836,10 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                                     };
                                     setBookingData({...bookingData, travelers: newTravelers});
                                   }}
-                                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white text-sm"
+                                  readOnly={index === 0 && isFirstTravelerSelf}
+                                  className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white text-sm ${
+                                    index === 0 && isFirstTravelerSelf ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''
+                                  }`}
                                   required
                                 />
                                 <div className="grid grid-cols-2 gap-2">
@@ -749,7 +857,10 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                                       };
                                       setBookingData({...bookingData, travelers: newTravelers});
                                     }}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white text-sm"
+                                    readOnly={index === 0 && isFirstTravelerSelf}
+                                    className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white text-sm ${
+                                      index === 0 && isFirstTravelerSelf ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''
+                                    }`}
                                     required
                                   />
                                   <input
@@ -764,13 +875,17 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                                       };
                                       setBookingData({...bookingData, travelers: newTravelers});
                                     }}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white text-sm"
+                                    readOnly={index === 0 && isFirstTravelerSelf}
+                                    className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary dark:bg-gray-700 dark:text-white text-sm ${
+                                      index === 0 && isFirstTravelerSelf ? 'bg-gray-100 dark:bg-gray-600 cursor-not-allowed' : ''
+                                    }`}
                                     required
                                   />
                                 </div>
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
 

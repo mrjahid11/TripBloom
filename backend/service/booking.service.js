@@ -103,6 +103,9 @@ export async function createBooking({
 
     const finalAmount = totalAmount - discountAmount;
 
+    // Variable to store assigned operator (from departure or package)
+    let assignedOperatorId = null;
+
     // For GROUP bookings, validate departure exists and has availability
     if (bookingType === 'GROUP') {
       if (!groupDepartureId) {
@@ -113,6 +116,8 @@ export async function createBooking({
       if (!departure) {
         return { error: 'Group departure not found' };
       }
+
+      console.log('[Booking Service] Group departure operators:', departure.operators);
 
       // Check if departure is open for booking
       if (departure.status !== 'OPEN') {
@@ -151,6 +156,14 @@ export async function createBooking({
         departure.status = 'FULL';
       }
       await departure.save();
+      
+      // Auto-assign operator from group departure if available
+      if (departure.operators && departure.operators.length > 0) {
+        assignedOperatorId = departure.operators[0].operatorId;
+        console.log('[Booking Service] Auto-assigning operator from departure:', assignedOperatorId);
+      } else {
+        console.log('[Booking Service] No operators found on departure');
+      }
     }
 
     // Validate travelers data
@@ -174,7 +187,8 @@ export async function createBooking({
       finalAmount,
       currency,
       status: 'PENDING',
-      reservedSeats
+      reservedSeats,
+      assignedOperator: assignedOperatorId
     });
 
     // Store booking reference for points history
@@ -188,12 +202,17 @@ export async function createBooking({
 
     await booking.save();
 
+    console.log('[Booking Service] Booking created with assignedOperator:', assignedOperatorId);
+
     // Populate references for response
     await booking.populate('customerId', 'fullName name email phone');
     await booking.populate('packageId', 'title destination type category');
+    await booking.populate('assignedOperator', 'fullName name email phone');
     if (groupDepartureId) {
       await booking.populate('groupDepartureId', 'startDate endDate totalSeats bookedSeats pricePerPerson');
     }
+
+    console.log('[Booking Service] Populated booking.assignedOperator:', booking.assignedOperator);
 
     return { booking };
   } catch (err) {
@@ -208,7 +227,8 @@ export async function getBookingById(bookingId) {
     const booking = await Booking.findById(bookingId)
       .populate('customerId', 'fullName name email phone')
       .populate('packageId') // Populate all package fields
-      .populate('groupDepartureId', 'startDate endDate totalSeats bookedSeats pricePerPerson');
+      .populate('groupDepartureId', 'startDate endDate totalSeats bookedSeats pricePerPerson')
+      .populate('assignedOperator', 'fullName name email phone');
 
     if (!booking) {
       return { error: 'Booking not found' };
@@ -258,6 +278,7 @@ export async function listBookings({
       .populate('customerId', 'fullName name email phone')
       .populate('packageId') // Populate all package fields for customer dashboard
       .populate('groupDepartureId', 'startDate endDate totalSeats bookedSeats pricePerPerson')
+      .populate('assignedOperator', 'fullName name email phone')
       .sort({ createdAt: -1 });
 
     return { bookings };
@@ -295,6 +316,7 @@ export async function updateBooking({ bookingId, travelers, operatorNotes }) {
 
     await booking.populate('customerId', 'name email phone');
     await booking.populate('packageId', 'title destination type category');
+    await booking.populate('assignedOperator', 'fullName name email phone');
     if (booking.groupDepartureId) {
       await booking.populate('groupDepartureId', 'startDate endDate totalSeats bookedSeats pricePerPerson');
     }
@@ -355,6 +377,7 @@ export async function cancelBooking({ bookingId, userId, reason }) {
 
     await booking.populate('customerId', 'name email phone');
     await booking.populate('packageId', 'title destination type category');
+    await booking.populate('assignedOperator', 'fullName name email phone');
 
     return { booking, refundAmount };
   } catch (err) {
@@ -408,6 +431,7 @@ export async function requestDateChange({ bookingId, userId, requestedDate, reas
     await booking.save();
     await booking.populate('customerId', 'name email phone');
     await booking.populate('packageId', 'title destination type category');
+    await booking.populate('assignedOperator', 'fullName name email phone');
 
     return { booking, message: 'Date change request submitted successfully' };
   } catch (err) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PaymentForm from './PaymentForm';
 import Invoice from './Invoice';
 
@@ -8,6 +8,14 @@ const BookingDetailModal = ({ booking, onClose, onUpdate }) => {
   const [cancelling, setCancelling] = useState(false);
   const [showCancelOptions, setShowCancelOptions] = useState(false);
   const [requestingDateChange, setRequestingDateChange] = useState(false);
+
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
 
   const handlePaymentSuccess = (res) => {
     if (res && res.success && res.booking) {
@@ -161,8 +169,8 @@ const BookingDetailModal = ({ booking, onClose, onUpdate }) => {
   const bookingConfirmed = (booking.status || '').toString().toUpperCase() === 'CONFIRMED' || (booking.status || '').toString().toUpperCase() === 'COMPLETED';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-2xl p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
         <div className="flex justify-between items-center">
           <h3 className="text-xl font-bold">Booking Details</h3>
           <button onClick={onClose} className="text-gray-600">Close</button>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FaComments, FaPaperPlane, FaUsers, FaBullhorn, FaUser, FaSearch } from 'react-icons/fa';
 
 const MessagesAnnouncements = () => {
@@ -11,10 +11,30 @@ const MessagesAnnouncements = () => {
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [selectedTour, setSelectedTour] = useState('');
   const [tours, setTours] = useState([]);
+  const messagesEndRef = useRef(null);
+  const previousMessagesCountRef = useRef(0);
 
   useEffect(() => {
     fetchData();
+    
+    // Auto-refresh conversations every 5 seconds
+    const interval = setInterval(() => {
+      fetchData();
+    }, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    // Auto-refresh messages for selected conversation every 3 seconds
+    if (selectedConversation) {
+      const interval = setInterval(() => {
+        loadConversationMessages(selectedConversation);
+      }, 3000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [selectedConversation]);
 
   const fetchData = async () => {
     try {
@@ -22,33 +42,88 @@ const MessagesAnnouncements = () => {
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       setTours(data.groupDepartures || []);
-      // Fetch all messages for operator's tours
+      
       let allConvs = [];
+      
+      // Fetch booking-based conversations (customer-operator 1-on-1)
+      const bookingsRes = await fetch(`/api/bookings?assignedOperator=${operatorId}`);
+      if (bookingsRes.ok) {
+        const bookingsData = await bookingsRes.json();
+        const bookings = Array.isArray(bookingsData) ? bookingsData : (bookingsData.bookings || []);
+        
+        for (const booking of bookings) {
+          // Fetch messages for this booking
+          const msgRes = await fetch(`/api/messages/booking/${booking._id}`);
+          const msgData = await msgRes.json();
+          
+          if (msgData.success && Array.isArray(msgData.messages) && msgData.messages.length > 0) {
+            const lastMsg = msgData.messages[msgData.messages.length - 1];
+            allConvs.push({
+              id: `booking-${booking._id}`,
+              bookingId: booking._id,
+              tourName: booking.packageId?.title || 'Tour Package',
+              customerId: booking.customerId?._id || booking.customerId,
+              customerName: booking.customerId?.fullName || booking.customerId?.name || 'Customer',
+              lastMessage: lastMsg.content,
+              timestamp: new Date(lastMsg.sentAt),
+              unread: 0, // Could implement unread logic
+              type: 'booking'
+            });
+          } else if (booking.customerId) {
+            // Show conversation even if no messages yet
+            allConvs.push({
+              id: `booking-${booking._id}`,
+              bookingId: booking._id,
+              tourName: booking.packageId?.title || 'Tour Package',
+              customerId: booking.customerId?._id || booking.customerId,
+              customerName: booking.customerId?.fullName || booking.customerId?.name || 'Customer',
+              lastMessage: 'No messages yet',
+              timestamp: new Date(booking.createdAt),
+              unread: 0,
+              type: 'booking'
+            });
+          }
+        }
+      }
+      
+      // Fetch tour-based messages (legacy/group announcements)
       for (const tour of data.groupDepartures || []) {
         const msgRes = await fetch(`/api/messages?tourId=${tour._id}`);
         const msgData = await msgRes.json();
         if (msgData.success && Array.isArray(msgData.messages)) {
-          allConvs = allConvs.concat(msgData.messages.map(msg => ({
-            tourId: tour._id,
-            tourName: tour.packageId?.title || 'Tour',
-            customerId: msg.recipientId?._id || msg.senderId?._id,
-            customerName: msg.recipientId?.fullName || msg.senderId?.fullName || 'Unknown',
-            lastMessage: msg.content,
-            timestamp: new Date(msg.sentAt),
-            unread: 0 // You can implement unread logic if needed
-          })));
+          for (const msg of msgData.messages) {
+            const customerId = msg.recipientId?._id || msg.senderId?._id;
+            if (customerId && customerId !== operatorId) {
+              allConvs.push({
+                id: `tour-${tour._id}-${customerId}`,
+                tourId: tour._id,
+                tourName: tour.packageId?.title || 'Tour',
+                customerId: customerId,
+                customerName: msg.recipientId?.fullName || msg.senderId?.fullName || 'Unknown',
+                lastMessage: msg.content,
+                timestamp: new Date(msg.sentAt),
+                unread: 0,
+                type: 'tour'
+              });
+            }
+          }
         }
       }
-      // Group by customerId and tourId to get unique chatheads
+      
+      // Remove duplicates and sort by timestamp
       const uniqueConvs = [];
       const seen = new Set();
       for (const conv of allConvs) {
-        const key = `${conv.customerId}-${conv.tourId}`;
+        const key = conv.bookingId ? `booking-${conv.bookingId}` : `${conv.customerId}-${conv.tourId}`;
         if (!seen.has(key)) {
           uniqueConvs.push(conv);
           seen.add(key);
         }
       }
+      
+      // Sort by timestamp descending
+      uniqueConvs.sort((a, b) => b.timestamp - a.timestamp);
+      
       setConversations(uniqueConvs);
     } catch (error) {
       console.error('Error:', error);
@@ -57,45 +132,96 @@ const MessagesAnnouncements = () => {
 
   const loadConversation = async (conv) => {
     setSelectedConversation(conv);
-    // Fetch messages from backend
-    const res = await fetch(`/api/messages?tourId=${conv.tourId}&recipientId=${conv.customerId}`);
-    const data = await res.json();
-    setMessages((data.messages || []).map(msg => ({
-      id: msg._id,
-      sender: msg.senderId === operatorId ? 'operator' : 'customer',
-      text: msg.content,
-      timestamp: new Date(msg.sentAt)
-    })));
+    previousMessagesCountRef.current = 0; // Reset count for new conversation
+    await loadConversationMessages(conv, true); // Initial load with scroll
     setConversations(conversations.map(c => c.id === conv.id ? { ...c, unread: 0 } : c));
+  };
+  
+  const scrollToBottom = (smooth = true) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
+  };
+  
+  const loadConversationMessages = async (conv, shouldScroll = false) => {
+    let fetchedMessages = [];
+    
+    // Fetch messages based on conversation type
+    if (conv.type === 'booking' && conv.bookingId) {
+      const res = await fetch(`/api/messages/booking/${conv.bookingId}`);
+      const data = await res.json();
+      fetchedMessages = (data.messages || []).map(msg => ({
+        id: msg._id,
+        sender: msg.senderId?._id === operatorId || msg.senderId === operatorId ? 'operator' : 'customer',
+        text: msg.content,
+        timestamp: new Date(msg.sentAt)
+      }));
+    } else if (conv.tourId) {
+      const res = await fetch(`/api/messages?tourId=${conv.tourId}&recipientId=${conv.customerId}`);
+      const data = await res.json();
+      fetchedMessages = (data.messages || []).map(msg => ({
+        id: msg._id,
+        sender: msg.senderId === operatorId ? 'operator' : 'customer',
+        text: msg.content,
+        timestamp: new Date(msg.sentAt)
+      }));
+    }
+    
+    // Only update if messages have changed
+    if (JSON.stringify(fetchedMessages) !== JSON.stringify(messages)) {
+      const hadNewMessages = fetchedMessages.length > previousMessagesCountRef.current;
+      setMessages(fetchedMessages);
+      previousMessagesCountRef.current = fetchedMessages.length;
+      
+      // Scroll if it's initial load, explicit scroll requested, or new messages arrived
+      if (shouldScroll || hadNewMessages) {
+        setTimeout(() => scrollToBottom(), 100);
+      }
+    }
   };
 
   const sendMessage = () => {
     if (!newMessage.trim() || !selectedConversation) return;
-    fetch('/api/messages/send', {
+    
+    const payload = {
+      senderId: operatorId,
+      recipientId: selectedConversation.customerId,
+      content: newMessage,
+      isBroadcast: false
+    };
+    
+    // Add bookingId or tourId based on conversation type
+    if (selectedConversation.type === 'booking' && selectedConversation.bookingId) {
+      payload.bookingId = selectedConversation.bookingId;
+    } else if (selectedConversation.tourId) {
+      payload.tourId = selectedConversation.tourId;
+    }
+    
+    fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tourId: selectedConversation.tourId,
-        senderId: operatorId,
-        recipientId: selectedConversation.customerId,
-        content: newMessage,
-        isBroadcast: false
-      })
+      body: JSON.stringify(payload)
     }).then(res => res.json()).then(data => {
       if (data.success) {
-        setMessages([...messages, {
+        const newMsg = {
           id: data.data._id,
           sender: 'operator',
           text: newMessage,
           timestamp: new Date(data.data.sentAt)
-        }]);
+        };
+        const updatedMessages = [...messages, newMsg];
+        setMessages(updatedMessages);
+        previousMessagesCountRef.current = updatedMessages.length;
         setNewMessage('');
         setConversations(conversations.map(c =>
           c.id === selectedConversation.id
             ? { ...c, lastMessage: newMessage, timestamp: new Date() }
             : c
         ));
+        // Scroll to bottom after sending
+        setTimeout(() => scrollToBottom(), 100);
       }
+    }).catch(err => {
+      console.error('Failed to send message:', err);
+      alert('Failed to send message. Please try again.');
     });
   };
 
@@ -232,6 +358,7 @@ const MessagesAnnouncements = () => {
                             </div>
                           </div>
                         ))}
+                        <div ref={messagesEndRef} />
                       </div>
                     </div>
                     {/* Input */}

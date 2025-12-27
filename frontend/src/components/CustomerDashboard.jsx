@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaPlane, FaHeart, FaHistory, FaUser, FaSignOutAlt, FaMapMarkedAlt, FaCalendarAlt, FaStar, FaBell, FaCheckCircle, FaTimesCircle, FaClock, FaDollarSign } from 'react-icons/fa';
+import { FaPlane, FaHeart, FaHistory, FaUser, FaSignOutAlt, FaMapMarkedAlt, FaCalendarAlt, FaStar, FaBell, FaCheckCircle, FaTimesCircle, FaClock, FaDollarSign, FaComments } from 'react-icons/fa';
 import Bookings from './Bookings';
 import { useAuth } from '../context/AuthContext';
 import CustomerPackageModal from './CustomerPackageModal';
 import MapModal from './MapModal';
 import BookingDetailModal from './BookingDetailModal';
+import OperatorChatModal from './OperatorChatModal';
+import NotificationCenter from './NotificationCenter';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
@@ -24,17 +26,13 @@ const CustomerDashboard = () => {
   const [bookingModalOpen, setBookingModalOpen] = React.useState(false);
   const [bookingModalData, setBookingModalData] = React.useState(null);
   const [tripsError, setTripsError] = React.useState(null);
+  const [chatModalOpen, setChatModalOpen] = React.useState(false);
+  const [chatBooking, setChatBooking] = React.useState(null);
+  const [chatOperator, setChatOperator] = React.useState(null);
   const [stats, setStats] = React.useState({
     totalTrips: 0,
     countriesVisited: 0,
     rewardPoints: 0
-  });
-  const [notifications, setNotifications] = React.useState([]);
-  const [showNotifications, setShowNotifications] = React.useState(true);
-  const [dismissedNotifications, setDismissedNotifications] = React.useState(() => {
-    // Load dismissed notifications from localStorage
-    const saved = localStorage.getItem('dismissedNotifications');
-    return saved ? JSON.parse(saved) : [];
   });
 
   React.useEffect(() => {
@@ -84,6 +82,13 @@ const CustomerDashboard = () => {
 
         setUpcomingTrips(upcoming);
         console.debug('[CustomerDashboard] mapped upcomingTrips:', upcoming);
+        console.debug('[CustomerDashboard] bookings with assignedOperator check:', 
+          upcoming.map(t => ({
+            id: t.id,
+            hasOperator: !!t.booking?.assignedOperator,
+            operator: t.booking?.assignedOperator
+          }))
+        );
         
         // Calculate stats from bookings
         const totalTrips = bookings.filter(b => b.status === 'COMPLETED').length;
@@ -137,89 +142,6 @@ const CustomerDashboard = () => {
     fetchRewardPoints();
   }, [user]);
 
-  // Fetch date change and refund notifications
-  React.useEffect(() => {
-    const fetchNotifications = async () => {
-      const userId = (user && user.id) || localStorage.getItem('userId');
-      if (!userId) return;
-
-      try {
-        const res = await fetch(`/api/bookings?customerId=${userId}`);
-        if (!res.ok) return;
-        
-        const data = await res.json();
-        const bookings = Array.isArray(data) ? data : (data.bookings || []);
-        
-        const allNotifications = [];
-        
-        // Date change request notifications
-        bookings.forEach(booking => {
-          if (booking.dateChangeRequest && booking.dateChangeRequest.status) {
-            const request = booking.dateChangeRequest;
-            const notifId = `datechange-${booking._id}-${request.status}`;
-            
-            // Skip if dismissed
-            if (dismissedNotifications.includes(notifId)) return;
-            
-            allNotifications.push({
-              id: notifId,
-              type: 'datechange',
-              bookingId: booking._id,
-              packageTitle: booking.packageId?.title || 'Tour Package',
-              status: request.status,
-              requestedDate: request.requestedDate,
-              requestedAt: request.requestedAt,
-              reviewedAt: request.reviewedAt,
-              reviewNotes: request.reviewNotes,
-              oldStartDate: booking.startDate,
-              timestamp: request.reviewedAt || request.requestedAt
-            });
-          }
-          
-          // Refund notifications
-          if (booking.status === 'REFUNDED' || booking.cancellation?.refundProcessed) {
-            const notifId = `refund-${booking._id}`;
-            
-            // Skip if dismissed
-            if (dismissedNotifications.includes(notifId)) return;
-            
-            // Calculate refund amount
-            const refundAmount = booking.cancellation?.refundAmount || 0;
-            
-            allNotifications.push({
-              id: notifId,
-              type: 'refund',
-              bookingId: booking._id,
-              packageTitle: booking.packageId?.title || 'Tour Package',
-              refundAmount,
-              refundProcessedAt: booking.cancellation?.refundProcessedAt,
-              timestamp: booking.cancellation?.refundProcessedAt || booking.updatedAt
-            });
-          }
-        });
-
-        // Sort by most recent first
-        allNotifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setNotifications(allNotifications);
-      } catch (err) {
-        console.error('Failed to fetch notifications:', err);
-      }
-    };
-
-    fetchNotifications();
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
-  }, [user, dismissedNotifications]);
-
-  // Handle notification dismissal
-  const dismissNotification = (notificationId) => {
-    const updated = [...dismissedNotifications, notificationId];
-    setDismissedNotifications(updated);
-    localStorage.setItem('dismissedNotifications', JSON.stringify(updated));
-    setNotifications(prev => prev.filter(n => n.id !== notificationId));
-  };
-
   const [savedTours, setSavedTours] = useState([]);
 
   useEffect(() => {
@@ -257,145 +179,32 @@ const CustomerDashboard = () => {
                 <p className="text-green-100">Your next adventure awaits</p>
               </div>
             </div>
-            <button 
-              onClick={() => {
-                logout();
-                navigate('/');
-              }}
-              className="flex items-center space-x-2 px-6 py-3 bg-white/20 backdrop-blur-md rounded-xl hover:bg-white/30 transition-all"
-            >
-              <FaSignOutAlt />
-              <span>Logout</span>
-            </button>
+            <div className="flex items-center space-x-4">
+              <NotificationCenter
+                userId={(user && user.id) || localStorage.getItem('userId')}
+                userRole="CUSTOMER"
+                onOpenChat={(booking, operator) => {
+                  setChatBooking(booking);
+                  setChatOperator(operator);
+                  setChatModalOpen(true);
+                }}
+              />
+              <button 
+                onClick={() => {
+                  logout();
+                  navigate('/');
+                }}
+                className="flex items-center space-x-2 px-6 py-3 bg-white/20 backdrop-blur-md rounded-xl hover:bg-white/30 transition-all"
+              >
+                <FaSignOutAlt />
+                <span>Logout</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Notifications */}
-        {notifications.length > 0 && showNotifications && (
-          <div className="mb-6 space-y-3">
-            {notifications.map((notification) => {
-              // Render date change notifications
-              if (notification.type === 'datechange') {
-                return (
-                  <div
-                    key={notification.id}
-                    className={`p-4 rounded-xl shadow-lg border-l-4 ${
-                      notification.status === 'APPROVED'
-                        ? 'bg-green-50 border-green-500 dark:bg-green-900/20'
-                        : notification.status === 'REJECTED'
-                        ? 'bg-red-50 border-red-500 dark:bg-red-900/20'
-                        : 'bg-blue-50 border-blue-500 dark:bg-blue-900/20'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-3 flex-1">
-                        <div className={`p-2 rounded-full ${
-                          notification.status === 'APPROVED'
-                            ? 'bg-green-100 text-green-600'
-                            : notification.status === 'REJECTED'
-                            ? 'bg-red-100 text-red-600'
-                            : 'bg-blue-100 text-blue-600'
-                        }`}>
-                          {notification.status === 'APPROVED' ? (
-                            <FaCheckCircle className="text-xl" />
-                          ) : notification.status === 'REJECTED' ? (
-                            <FaTimesCircle className="text-xl" />
-                          ) : (
-                            <FaClock className="text-xl" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                            {notification.status === 'APPROVED'
-                              ? '✅ Date Change Approved'
-                              : notification.status === 'REJECTED'
-                              ? '❌ Date Change Rejected'
-                              : '⏳ Date Change Request Submitted'}
-                          </h3>
-                          <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-                            <strong>{notification.packageTitle}</strong>
-                          </p>
-                          {notification.status === 'PENDING' && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              Requested new date: <strong>{new Date(notification.requestedDate).toLocaleDateString()}</strong>
-                              <br />
-                              <span className="text-xs text-gray-500">Submitted {new Date(notification.requestedAt).toLocaleString()}</span>
-                            </p>
-                          )}
-                          {notification.status === 'APPROVED' && (
-                            <p className="text-sm text-green-700 dark:text-green-300">
-                              Your tour has been rescheduled to <strong>{new Date(notification.requestedDate).toLocaleDateString()}</strong>
-                              {notification.reviewNotes && (
-                                <>
-                                  <br />
-                                  <span className="text-xs italic">{notification.reviewNotes}</span>
-                                </>
-                              )}
-                            </p>
-                          )}
-                          {notification.status === 'REJECTED' && (
-                            <p className="text-sm text-red-700 dark:text-red-300">
-                              {notification.reviewNotes || 'Your date change request could not be approved at this time.'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => dismissNotification(notification.id)}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 ml-4"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                );
-              }
-              
-              // Render refund notifications
-              if (notification.type === 'refund') {
-                return (
-                  <div
-                    key={notification.id}
-                    className="p-4 rounded-xl shadow-lg border-l-4 bg-green-50 border-green-500 dark:bg-green-900/20"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-3 flex-1">
-                        <div className="p-2 rounded-full bg-green-100 text-green-600">
-                          <FaDollarSign className="text-xl" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                            💰 Refund Processed
-                          </h3>
-                          <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-                            <strong>{notification.packageTitle}</strong>
-                          </p>
-                          <p className="text-sm text-green-700 dark:text-green-300">
-                            Your refund of <strong>${notification.refundAmount?.toLocaleString() || '0'}</strong> has been processed.
-                            <br />
-                            <span className="text-xs text-gray-500">
-                              Processed on {new Date(notification.refundProcessedAt).toLocaleString()}
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => dismissNotification(notification.id)}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 ml-4"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                );
-              }
-              
-              return null;
-            })}
-          </div>
-        )}
 
         {/* Navigation Tabs */}
         <div className="flex space-x-4 mb-8 overflow-x-auto pb-2">
@@ -473,6 +282,27 @@ const CustomerDashboard = () => {
                         className="flex-1 bg-primary text-white py-2 rounded-lg hover:bg-green-700 transition-colors font-semibold"
                       >
                         View Details
+                      </button>
+                      <button
+                        onClick={() => {
+                          console.log('Chat button clicked, booking:', trip.booking);
+                          console.log('Assigned operator:', trip.booking?.assignedOperator);
+                          if (!trip.booking?.assignedOperator) {
+                            alert('No operator assigned to this tour yet. Please contact support.');
+                            return;
+                          }
+                          setChatBooking(trip.booking);
+                          setChatOperator(trip.booking.assignedOperator);
+                          setChatModalOpen(true);
+                        }}
+                        className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                          trip.booking?.assignedOperator 
+                            ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                            : 'bg-gray-300 hover:bg-gray-400 text-gray-600 cursor-not-allowed'
+                        }`}
+                        title={trip.booking?.assignedOperator ? 'Chat with Tour Operator' : 'No operator assigned yet'}
+                      >
+                        <FaComments />
                       </button>
                       <button
                         onClick={() => {
@@ -566,6 +396,19 @@ const CustomerDashboard = () => {
 
         {mapOpen && (
           <MapModal isOpen={mapOpen} onClose={() => setMapOpen(false)} coords={mapCoords} title={mapTitle} />
+        )}
+
+        {chatModalOpen && chatBooking && (
+          <OperatorChatModal
+            isOpen={chatModalOpen}
+            onClose={() => {
+              setChatModalOpen(false);
+              setChatBooking(null);
+              setChatOperator(null);
+            }}
+            booking={chatBooking}
+            operator={chatOperator}
+          />
         )}
 
         {/* Bookings (from backend) */}

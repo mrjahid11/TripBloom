@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import BookingDetailModal from './BookingDetailModal';
-import { FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaStar } from 'react-icons/fa';
+import OperatorChatModal from './OperatorChatModal';
+import { FaCalendarAlt, FaCheckCircle, FaTimesCircle, FaStar, FaComments } from 'react-icons/fa';
 
 const CustomerHistory = () => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [chatBooking, setChatBooking] = useState(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -182,13 +184,22 @@ const CustomerHistory = () => {
                         </div>
                       </div>
 
-                      <div className="flex space-x-3">
+                      <div className="flex flex-wrap gap-3">
                         <button
                           onClick={() => setSelected(booking)}
                           className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-green-700 transition-colors"
                         >
                           View Details
                         </button>
+                        {isPaid && booking.assignedOperator && (
+                          <button
+                            onClick={() => setChatBooking(booking)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                          >
+                            <FaComments className="mr-2" />
+                            Chat with Operator
+                          </button>
+                        )}
                         {booking.status === 'COMPLETED' && (
                           <button
                             onClick={() => window.location.href = '/customer/reviews'}
@@ -215,6 +226,15 @@ const CustomerHistory = () => {
               setHistory((prev) => prev.map(b => (b._id === updated._id ? updated : b)));
               setSelected(updated);
             }}
+          />
+        )}
+        
+        {chatBooking && (
+          <OperatorChatModal
+            isOpen={true}
+            onClose={() => setChatBooking(null)}
+            booking={chatBooking}
+            operator={chatBooking.assignedOperator}
           />
         )}
       </div>

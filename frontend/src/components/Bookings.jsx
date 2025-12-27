@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import BookingDetailModal from './BookingDetailModal';
+import OperatorChatModal from './OperatorChatModal';
 import { useAuth } from '../context/AuthContext';
 
 const Bookings = () => {
@@ -7,6 +8,7 @@ const Bookings = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [chatBooking, setChatBooking] = useState(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -180,8 +182,18 @@ const Bookings = () => {
             )}
           </div>
         </div>
-        <div className="mt-4">
-          <button onClick={() => setSelected(b)} className="px-4 py-2 rounded-lg bg-primary text-white">View</button>
+        <div className="mt-4 flex gap-2">
+          <button onClick={() => setSelected(b)} className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-green-700 transition-colors">
+            View Details
+          </button>
+          {paymentInfo.isPaid && b.assignedOperator && (
+            <button 
+              onClick={() => setChatBooking(b)} 
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-2"
+            >
+              💬 Chat
+            </button>
+          )}
         </div>
       </div>
     );
@@ -249,6 +261,15 @@ const Bookings = () => {
           setBookings((prev) => prev.map(p => (p._id === updated._id ? updated : p)));
           setSelected(updated);
         }} />
+      )}
+      
+      {chatBooking && (
+        <OperatorChatModal
+          isOpen={true}
+          onClose={() => setChatBooking(null)}
+          booking={chatBooking}
+          operator={chatBooking.assignedOperator}
+        />
       )}
     </div>
   );

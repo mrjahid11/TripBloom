@@ -130,7 +130,7 @@ const OperatorProfile = () => {
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
           <FaUser className="mr-3 text-orange-600" />
-          Operator Profile & Availability
+          Operator Profile
         </h1>
       </div>
 
@@ -179,11 +179,7 @@ const OperatorProfile = () => {
         <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Contact Information</h2>
           
-          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-            <p className="text-sm text-blue-800 dark:text-blue-300">
-              ℹ️ <strong>Currently viewing data from database:</strong> Full Name, Email, Phone
-            </p>
-          </div>
+          
           
           <div className="space-y-4">
             <div>

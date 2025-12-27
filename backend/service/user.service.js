@@ -152,12 +152,32 @@ export async function getUserById({ userId }) {
 }
 
 // Update own profile (customer/operator)
-export async function updateProfile({ userId, fullName, phone }) {
+export async function updateProfile({ userId, fullName, phone, age }) {
   const update = {};
   if (fullName) update.fullName = fullName;
   if (phone !== undefined) update.phone = phone;
-  const user = await User.findByIdAndUpdate(userId, update, { new: true, fields: '-passwordHash' });
+  
+  console.log('updateProfile - Received age:', age, 'Type:', typeof age);
+  
+  if (age !== undefined) {
+    if (age === null || age === '') {
+      update.age = null; // Explicitly clear the age field
+    } else {
+      const parsedAge = parseInt(age);
+      console.log('updateProfile - Parsed age:', parsedAge);
+      if (!isNaN(parsedAge) && parsedAge > 0 && parsedAge <= 120) {
+        update.age = parsedAge;
+      }
+    }
+  }
+  
+  console.log('updateProfile - Update object:', update);
+  
+  const user = await User.findByIdAndUpdate(userId, update, { new: true, select: '-passwordHash' });
   if (!user) return { error: 'User not found.' };
+  
+  console.log('updateProfile - Saved user age:', user.age);
+  
   return { user };
 }
 
