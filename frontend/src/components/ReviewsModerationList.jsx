@@ -2,19 +2,47 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { FaStar, FaCheck, FaTimes, FaEye, FaFilter, FaSearch, FaFlag, FaClock, FaCheckCircle, FaTimesCircle } from 'react-icons/fa';
 import ReviewDetailModal from './ReviewDetailModal';
+import { useSearchParams } from 'react-router-dom';
 
 const ReviewsModerationList = () => {
   const [reviews, setReviews] = useState([]);
+  const [allReviews, setAllReviews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('PENDING');
   const [ratingFilter, setRatingFilter] = useState('all');
   const [selectedReview, setSelectedReview] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [searchParams] = useSearchParams();
+  const deepReviewId = searchParams.get('reviewId');
 
   useEffect(() => {
     fetchReviews();
   }, [statusFilter, ratingFilter]);
+
+  useEffect(() => {
+    // If a reviewId was provided via query param, try to open it after reviews load
+    if (deepReviewId) {
+      // If we already have it in the list, open it; otherwise fetch the single review
+      const found = reviews.find(r => r._id === deepReviewId);
+      if (found) {
+        setSelectedReview(found);
+        setShowDetailModal(true);
+      } else {
+        (async () => {
+          try {
+            const resp = await axios.get(`/api/reviews/${deepReviewId}`);
+            if (resp.data && resp.data.review) {
+              setSelectedReview(resp.data.review);
+              setShowDetailModal(true);
+            }
+          } catch (err) {
+            console.debug('Failed to fetch deep-linked review', deepReviewId, err?.message || err);
+          }
+        })();
+      }
+    }
+  }, [deepReviewId, reviews]);
 
   const fetchReviews = async () => {
     setLoading(true);
@@ -42,6 +70,15 @@ const ReviewsModerationList = () => {
       
       if (response.data.success) {
         setReviews(response.data.reviews);
+      }
+      // Also fetch all reviews (no filters) to compute global stats/averages
+      try {
+        const allRes = await axios.get('/api/reviews');
+        if (allRes.data && allRes.data.reviews) {
+          setAllReviews(allRes.data.reviews);
+        }
+      } catch (err) {
+        console.debug('Failed to fetch all reviews for stats', err?.message || err);
       }
     } catch (error) {
       console.error('Failed to fetch reviews:', error);
@@ -141,25 +178,25 @@ const ReviewsModerationList = () => {
         <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-yellow-900/20 dark:to-yellow-800/20 rounded-xl p-4">
           <div className="text-sm text-yellow-600 dark:text-yellow-400 font-semibold mb-1">Pending</div>
           <div className="text-3xl font-bold text-yellow-900 dark:text-yellow-300">
-            {reviews.filter(r => r.status === 'PENDING').length}
+            {allReviews.filter(r => r.status === 'PENDING').length}
           </div>
         </div>
         <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 rounded-xl p-4">
           <div className="text-sm text-green-600 dark:text-green-400 font-semibold mb-1">Approved</div>
           <div className="text-3xl font-bold text-green-900 dark:text-green-300">
-            {reviews.filter(r => r.status === 'APPROVED').length}
+            {allReviews.filter(r => r.status === 'APPROVED').length}
           </div>
         </div>
         <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 rounded-xl p-4">
           <div className="text-sm text-red-600 dark:text-red-400 font-semibold mb-1">Rejected</div>
           <div className="text-3xl font-bold text-red-900 dark:text-red-300">
-            {reviews.filter(r => r.status === 'REJECTED').length}
+            {allReviews.filter(r => r.status === 'REJECTED').length}
           </div>
         </div>
         <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-xl p-4">
           <div className="text-sm text-purple-600 dark:text-purple-400 font-semibold mb-1">Avg Rating</div>
           <div className="text-3xl font-bold text-purple-900 dark:text-purple-300">
-            {reviews.length > 0 ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) : '0.0'}
+            {allReviews.length > 0 ? (allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length).toFixed(1) : '0.0'}
           </div>
         </div>
       </div>

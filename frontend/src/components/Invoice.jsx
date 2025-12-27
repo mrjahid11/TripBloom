@@ -109,7 +109,7 @@ const Invoice = ({ isOpen, onClose, booking }) => {
           {/* Header */}
           <div className="text-center border-b-2 border-primary pb-6 mb-6">
             <h1 className="text-4xl font-bold text-primary mb-2">TripBloom</h1>
-            <p className="text-gray-600 dark:text-gray-400">Your Travel Partner</p>
+            <p className="text-gray-600 dark:text-gray-400">Where Every Journey Blossoms</p>
             <p className="text-sm text-gray-500 mt-2">Email: info@tripbloom.com | Phone: +880-123-456789</p>
           </div>
 

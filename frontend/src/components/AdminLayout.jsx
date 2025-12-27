@@ -39,6 +39,7 @@ const AdminLayout = () => {
   const fetchUnread = async () => {
     try {
       const role = localStorage.getItem('userRole') || '';
+      const roleUpper = (role || '').toUpperCase();
       
       // Fetch all notification sources in parallel
       const [contactsRes, bookingsRes] = await Promise.all([
@@ -108,6 +109,38 @@ const AdminLayout = () => {
       
       setUnreadList(recentNotifications);
       setUnreadCount(notifications.length);
+      // Additionally fetch pending reviews (admin/moderator)
+      try {
+        // allow different casing (admin, ADMIN, Admin)
+        if (roleUpper === 'ADMIN' || roleUpper === 'MODERATOR') {
+          const revRes = await axios.get('/api/reviews?status=PENDING').catch(() => ({ data: { reviews: [] } }));
+          const reviews = revRes.data.reviews || [];
+          const reviewNotifs = reviews.map(r => ({
+            id: `review-pending-${r._id}`,
+            type: 'review-pending',
+            icon: '🕒',
+            title: 'Review Awaiting Approval',
+            message: `${r.customerId?.fullName || 'Customer'} submitted a review for ${r.packageId?.title || 'a package'}`,
+            time: new Date(r.createdAt),
+            // deep-link into the reviews moderation page with the specific review id
+            action: () => navigate(`/admin/reviews?reviewId=${r._id}`)
+          }));
+
+          console.debug('AdminLayout: fetched pending reviews', reviewNotifs.length, { role: roleUpper });
+
+          if (reviewNotifs.length > 0) {
+            const merged = [...reviewNotifs, ...recentNotifications]
+              .sort((a, b) => b.time - a.time)
+              .slice(0, 10);
+            // compute unique count by id to avoid double-counting
+            const uniqueIds = new Set(merged.map(n => n.id));
+            setUnreadList(merged);
+            setUnreadCount(uniqueIds.size);
+          }
+        }
+      } catch (err) {
+        // ignore review fetch errors
+      }
     } catch (err) {
       // ignore polling errors
       console.debug('Unread fetch failed', err?.message || err);
@@ -337,9 +370,11 @@ const AdminLayout = () => {
                               <span className={`px-2 py-0.5 text-xs font-semibold rounded-full flex-shrink-0 ${
                                 n.type === 'datechange' 
                                   ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' 
+                                  : n.type === 'review-pending'
+                                  ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400'
                                   : 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400'
                               }`}>
-                                {n.type === 'datechange' ? 'Date Change' : 'Refund'}
+                                {n.type === 'datechange' ? 'Date Change' : n.type === 'review-pending' ? 'Review' : 'Refund'}
                               </span>
                             )}
                           </div>

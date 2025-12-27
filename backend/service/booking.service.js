@@ -659,6 +659,38 @@ export async function completeBooking(bookingId) {
   }
 }
 
+// Mark booking as checked in by customer
+export async function checkInBooking(bookingId, userId) {
+  try {
+    const booking = await Booking.findById(bookingId);
+    if (!booking) return { error: 'Booking not found' };
+
+    if (booking.status === 'CANCELLED' || booking.status === 'REFUNDED') {
+      return { error: 'Cannot check in for cancelled or refunded booking' };
+    }
+
+    // Allow check-in if booking exists and not already checked in
+    booking.checkedIn = true;
+    booking.checkedInAt = new Date();
+    booking.checkedInByUser = userId || null;
+
+    // If booking was pending, optionally mark confirmed
+    if (booking.status === 'PENDING') {
+      booking.status = 'CONFIRMED';
+    }
+
+    await booking.save();
+
+    await booking.populate('customerId', 'fullName name email phone');
+    await booking.populate('packageId', 'title destination');
+
+    return { booking };
+  } catch (err) {
+    console.error('Error checking in booking:', err);
+    return { error: 'Failed to check in booking' };
+  }
+}
+
 // Process refund for a cancelled booking
 export async function processRefund({ bookingId, adminId }) {
   try {

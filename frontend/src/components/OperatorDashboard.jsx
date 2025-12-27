@@ -14,7 +14,19 @@ const OperatorDashboard = () => {
   const userName = localStorage.getItem('userName') || 'Operator';
   const firstName = userName.split(' ')[0];
   
-  const [activeView, setActiveView] = useState('dashboard');
+  const [activeView, setActiveView] = useState(() => {
+    try {
+      return localStorage.getItem('operatorActiveView') || 'dashboard';
+    } catch (e) {
+      return 'dashboard';
+    }
+  });
+  const [openBookingId, setOpenBookingId] = useState(null);
+
+  const handleSetActiveView = (id) => {
+    setActiveView(id);
+    try { localStorage.setItem('operatorActiveView', id); } catch (e) { /* ignore */ }
+  };
 
   const menuItems = [
     { id: 'dashboard', icon: FaHome, label: 'Dashboard' },
@@ -36,7 +48,7 @@ const OperatorDashboard = () => {
       case 'itineraries':
         return <ItinerariesManager />;
       case 'messages':
-        return <MessagesAnnouncements />;
+        return <MessagesAnnouncements openBookingId={openBookingId} />;
       case 'profile':
         return <OperatorProfile />;
       default:
@@ -65,7 +77,7 @@ const OperatorDashboard = () => {
           {menuItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveView(item.id)}
+              onClick={() => handleSetActiveView(item.id)}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
                 activeView === item.id
                   ? 'bg-white/20 backdrop-blur-md shadow-lg'
@@ -83,6 +95,7 @@ const OperatorDashboard = () => {
             localStorage.removeItem('userName');
             localStorage.removeItem('userRole');
             localStorage.removeItem('userId');
+            try { localStorage.removeItem('operatorActiveView'); } catch (e) {}
             navigate('/');
           }}
           className="absolute bottom-6 left-6 right-6 flex items-center justify-center space-x-2 px-4 py-3 bg-white/20 backdrop-blur-md rounded-xl hover:bg-white/30 transition-all"
@@ -94,24 +107,43 @@ const OperatorDashboard = () => {
 
       {/* Main Content */}
       <div className="ml-64 p-8">
-        {/* Header */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-8 border border-gray-200 dark:border-gray-700">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                Welcome back, {firstName}! 🚌
-              </h2>
-              <p className="text-gray-600 dark:text-gray-400">
-                {menuItems.find(m => m.id === activeView)?.label || 'Dashboard'}
-              </p>
+        {/* Header: large welcome only on dashboard; compact title+controls on other views */}
+        {activeView === 'dashboard' ? (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-8 border border-gray-200 dark:border-gray-700">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                  Welcome back, {firstName}! 🚌
+                </h2>
+              </div>
+              <div className="flex items-center space-x-4">
+                <NotificationCenter
+                  userId={localStorage.getItem('userId')}
+                  userRole="TOUR_OPERATOR"
+                  onOpenChat={(booking, customer) => {
+                  setOpenBookingId(booking._id);
+                  handleSetActiveView('messages');
+                  }}
+                />
+                <div className="text-right">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Current Rating</p>
+                  <p className="text-3xl font-bold text-orange-600">4.9 ⭐</p>
+                </div>
+              </div>
             </div>
+          </div>
+        ) : (
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {menuItems.find(m => m.id === activeView)?.label || 'Dashboard'}
+            </h2>
             <div className="flex items-center space-x-4">
               <NotificationCenter
                 userId={localStorage.getItem('userId')}
                 userRole="TOUR_OPERATOR"
-                onOpenChat={() => {
-                  // Switch to messages view when notification is clicked
-                  setActiveView('messages');
+                onOpenChat={(booking, customer) => {
+                  setOpenBookingId(booking._id);
+                  handleSetActiveView('messages');
                 }}
               />
               <div className="text-right">
@@ -120,7 +152,7 @@ const OperatorDashboard = () => {
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Dynamic Content */}
         {renderContent()}

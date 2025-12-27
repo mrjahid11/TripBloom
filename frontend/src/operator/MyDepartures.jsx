@@ -281,6 +281,13 @@ const MyDepartures = () => {
                             ))}
                           </div>
                         )}
+                        {/* Show 'You are in a tour' if current operator is assigned and tour is active */}
+                        {dep.operators && dep.operators.some(op => (op.operatorId?._id || op.operatorId)?.toString() === operatorId) &&
+                          (new Date(dep.startDate) <= new Date() && new Date() <= new Date(dep.endDate)) && (
+                          <div className="mt-2 inline-block px-3 py-1 rounded-full bg-green-600 text-white text-sm font-semibold">
+                            You are in a tour
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
                         {getTourType(dep)}

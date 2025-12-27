@@ -74,12 +74,18 @@ const OperatorChatModal = ({ isOpen, onClose, booking, operator }) => {
       const res = await axios.get(`/api/messages/booking/${booking._id}`);
       if (res.data.success) {
         const newMessages = res.data.messages || [];
-        
+        // Filter messages so operator only sees conversations where they are a participant
+        const filtered = newMessages.filter(msg => {
+          const sId = msg.senderId?._id || msg.senderId;
+          const rId = msg.recipientId?._id || msg.recipientId;
+          return String(sId) === String(userId) || String(rId) === String(userId);
+        });
+
         // Only update state if messages have actually changed
-        if (JSON.stringify(newMessages) !== JSON.stringify(messages)) {
-          const hadNewMessages = newMessages.length > previousMessagesCountRef.current;
-          setMessages(newMessages);
-          previousMessagesCountRef.current = newMessages.length;
+        if (JSON.stringify(filtered) !== JSON.stringify(messages)) {
+          const hadNewMessages = filtered.length > previousMessagesCountRef.current;
+          setMessages(filtered);
+          previousMessagesCountRef.current = filtered.length;
           
           // Only scroll if:
           // 1. Initial load or explicit scroll requested

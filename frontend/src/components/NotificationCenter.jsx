@@ -24,6 +24,30 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
     }
   }, [userId, viewedNotifications]);
 
+  // additionally fetch review notifications depending on role
+  useEffect(() => {
+    // For customers we need the userId; for admins/moderators we can fetch pending reviews without userId
+    const uid = userId || localStorage.getItem(`userId`);
+    const roleStored = userRole || localStorage.getItem('userRole') || '';
+    const roleUpper = (roleStored || '').toUpperCase();
+    if (roleUpper === 'CUSTOMER') {
+      if (uid) fetchCustomerReviewNotifications();
+    }
+    if (roleUpper === 'ADMIN' || roleUpper === 'MODERATOR') {
+      fetchAdminReviewNotifications();
+    }
+
+    // refresh periodically for reviews too
+    const rInterval = setInterval(() => {
+      const cachedUid = userId || localStorage.getItem(`userId`);
+      const roleStored2 = userRole || localStorage.getItem('userRole') || '';
+      const roleUpper2 = (roleStored2 || '').toUpperCase();
+      if (roleUpper2 === 'CUSTOMER' && cachedUid) fetchCustomerReviewNotifications();
+      if (roleUpper2 === 'ADMIN' || roleUpper2 === 'MODERATOR') fetchAdminReviewNotifications();
+    }, 15000);
+    return () => clearInterval(rInterval);
+  }, [userId, userRole, viewedNotifications]);
+
   const fetchNotifications = async () => {
     try {
       if (userRole === 'CUSTOMER') {
@@ -159,10 +183,48 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
     setUnreadCount(unread);
   };
 
+  // Fetch approved reviews for this customer and add notifications
+  const fetchCustomerReviewNotifications = async () => {
+    try {
+      const res = await fetch(`/api/reviews?customerId=${userId}&status=APPROVED`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const reviews = Array.isArray(data) ? data : (data.reviews || []);
+      const reviewNotifs = reviews.map(r => ({
+        id: `review-approved-${r._id}`,
+        type: 'review-approved',
+        title: 'Review Published',
+        message: `Your review for ${r.packageId?.title || 'the package'} is now published`,
+        timestamp: new Date(r.updatedAt || r.createdAt),
+        icon: FaCheckCircle,
+        color: 'green',
+        review: r
+      }));
+      // merge into current notifications, avoiding duplicates
+      setNotifications(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const merged = [...prev];
+        reviewNotifs.forEach(n => { if (!existingIds.has(n.id)) merged.push(n); });
+        merged.sort((a, b) => b.timestamp - a.timestamp);
+        // compute unread based on merged list
+        const unread = merged.filter(n => !viewedNotifications.includes(n.id)).length;
+        setUnreadCount(unread);
+        console.debug('NotificationCenter: fetched approved reviews', reviewNotifs.length, 'merged=', merged.length);
+        return merged;
+      });
+    } catch (err) {
+      // ignore
+    }
+  };
+
   const fetchOperatorNotifications = async () => {
     const res = await fetch(`/api/bookings?assignedOperator=${userId}`);
     const data = await res.json();
-    const bookings = Array.isArray(data) ? data : (data.bookings || []);
+    let bookings = Array.isArray(data) ? data : (data.bookings || []);
+
+    // Only keep group bookings (assigned via group departures). Operators should not see personal tour bookings
+    bookings = bookings.filter(b => (b.bookingType && b.bookingType.toString().toUpperCase() === 'GROUP') || b.groupDepartureId);
+    console.debug('NotificationCenter: operator bookings filtered for group tours', bookings.length);
     
     const notifs = [];
     
@@ -239,6 +301,38 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
     setUnreadCount(unread);
   };
 
+  // Fetch pending reviews for admins (or moderators)
+  const fetchAdminReviewNotifications = async () => {
+    try {
+      const res = await fetch(`/api/reviews?status=PENDING`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const reviews = Array.isArray(data) ? data : (data.reviews || []);
+      const notifs = reviews.map(r => ({
+        id: `review-pending-${r._id}`,
+        type: 'review-pending',
+        title: 'Review Awaiting Approval',
+        message: `${r.customerId?.fullName || 'Customer'} submitted a review for ${r.packageId?.title || 'a package'}`,
+        timestamp: new Date(r.createdAt),
+        icon: FaClock,
+        color: 'yellow',
+        review: r
+      }));
+      setNotifications(prev => {
+        const existing = new Set(prev.map(p => p.id));
+        const merged = [...prev];
+        notifs.forEach(n => { if (!existing.has(n.id)) merged.push(n); });
+        merged.sort((a, b) => b.timestamp - a.timestamp);
+        const unread = merged.filter(n => !viewedNotifications.includes(n.id)).length;
+        setUnreadCount(unread);
+        console.debug('NotificationCenter: fetched pending reviews', notifs.length, 'merged=', merged.length);
+        return merged;
+      });
+    } catch (err) {
+      // ignore
+    }
+  };
+
   const markAsViewed = (notificationId) => {
     if (!viewedNotifications.includes(notificationId)) {
       const updated = [...viewedNotifications, notificationId];
@@ -254,8 +348,25 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
       onOpenChat(notif.booking, notif.operator || notif.customer);
       setIsOpen(false);
     } else {
-      // For other notification types, could navigate to relevant page
-      setIsOpen(false);
+      // Navigate for review notifications or close dropdown
+      try {
+        const roleStored = userRole || localStorage.getItem('userRole') || '';
+        const roleUpper = (roleStored || '').toUpperCase();
+        if (notif.type === 'review-approved') {
+          // customer view
+          window.location.href = `/customer/reviews?reviewId=${notif.review?._id || ''}`;
+          return;
+        }
+        if (notif.type === 'review-pending') {
+          // admin/moderator view
+          window.location.href = `/admin/reviews?reviewId=${notif.review?._id || ''}`;
+          return;
+        }
+      } catch (err) {
+        console.debug('Navigation error for notification', err);
+      } finally {
+        setIsOpen(false);
+      }
     }
   };
 

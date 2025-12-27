@@ -6,6 +6,7 @@ import { FaTimes, FaCalendarAlt, FaUsers, FaUserTie, FaExclamationTriangle } fro
 const CreateDepartureModal = ({ isOpen, onClose, onDepartureCreated }) => {
   const [groupPackages, setGroupPackages] = useState([]);
   const [operators, setOperators] = useState([]);
+  const [operatorStatus, setOperatorStatus] = useState({}); // { [opId]: { unavailable: bool, reasons: [] } }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -25,6 +26,13 @@ const CreateDepartureModal = ({ isOpen, onClose, onDepartureCreated }) => {
       setError('');
     }
   }, [isOpen]);
+
+  // Re-evaluate operator availability whenever dates change
+  useEffect(() => {
+    if (!formData.startDate || !formData.endDate || operators.length === 0) return;
+    evaluateOperatorAvailability();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.startDate, formData.endDate, operators]);
 
   const fetchGroupPackages = async () => {
     try {
@@ -53,6 +61,38 @@ const CreateDepartureModal = ({ isOpen, onClose, onDepartureCreated }) => {
     } catch (err) {
       console.error('Failed to fetch operators:', err);
     }
+  };
+
+  const evaluateOperatorAvailability = async () => {
+    const map = {};
+    const start = formData.startDate ? new Date(formData.startDate) : null;
+    const end = formData.endDate ? new Date(formData.endDate) : null;
+
+    await Promise.all(operators.map(async (op) => {
+      try {
+        const res = await axios.get(`/api/group-departure/operator/${op._id}/future`);
+        const deps = res.data.departures || [];
+
+        // Operator is unavailable if any assigned departure overlaps with the new departure dates
+        let unavailable = false;
+        const reasons = [];
+        deps.forEach(d => {
+          const dStart = new Date(d.startDate);
+          const dEnd = new Date(d.endDate);
+          // Overlap if start <= dEnd && dStart <= end
+          if (start && end && (start <= dEnd && dStart <= end)) {
+            unavailable = true;
+            reasons.push(`Overlaps with ${d.packageId?.title || 'another tour'} (${new Date(d.startDate).toLocaleDateString()} - ${new Date(d.endDate).toLocaleDateString()})`);
+          }
+        });
+
+        map[op._id] = { unavailable, reasons };
+      } catch (err) {
+        map[op._id] = { unavailable: false, reasons: [] };
+      }
+    }));
+
+    setOperatorStatus(map);
   };
 
   const handlePackageChange = (packageId) => {
@@ -285,12 +325,13 @@ const CreateDepartureModal = ({ isOpen, onClose, onDepartureCreated }) => {
                   operators.map(op => (
                     <label
                       key={op._id}
-                      className="flex items-center p-3 bg-white dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer transition-colors"
+                      className={`flex items-center p-3 bg-white dark:bg-gray-700 rounded-lg transition-colors ${operatorStatus[op._id]?.unavailable ? 'opacity-60 cursor-not-allowed' : 'hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer'}`}
                     >
                       <input
                         type="checkbox"
                         checked={formData.selectedOperators.includes(op._id)}
-                        onChange={() => handleOperatorToggle(op._id)}
+                        onChange={() => operatorStatus[op._id]?.unavailable ? null : handleOperatorToggle(op._id)}
+                        disabled={operatorStatus[op._id]?.unavailable}
                         className="mr-3 w-5 h-5 text-blue-600"
                       />
                       <div className="flex items-center flex-1">
@@ -304,6 +345,11 @@ const CreateDepartureModal = ({ isOpen, onClose, onDepartureCreated }) => {
                           <div className="text-sm text-gray-600 dark:text-gray-400">
                             {op.email}
                           </div>
+                          {operatorStatus[op._id]?.unavailable && (
+                            <div className="text-xs text-red-500 mt-1">
+                              {operatorStatus[op._id].reasons[0] || 'Unavailable for selected dates'}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </label>

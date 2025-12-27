@@ -38,6 +38,22 @@ export async function updateGroupDeparture({ departureId, startDate, endDate, to
   if (Array.isArray(arguments[0].seatMap)) {
     departure.seatMap = arguments[0].seatMap;
   }
+  // Update checked flag for seat map quickly
+  if (typeof arguments[0].seatMapChecked === 'boolean') {
+    departure.seatMapChecked = arguments[0].seatMapChecked;
+  }
+  // Update safety checklist if provided
+  if (arguments[0].safetyChecklist && typeof arguments[0].safetyChecklist === 'object') {
+    departure.safetyChecklist = { ...departure.safetyChecklist, ...arguments[0].safetyChecklist };
+  }
+  // Update itinerary if provided
+  if (Array.isArray(arguments[0].itinerary)) {
+    departure.itinerary = arguments[0].itinerary;
+  }
+  // Update tourStarted flag
+  if (typeof arguments[0].tourStarted === 'boolean') {
+    departure.tourStarted = arguments[0].tourStarted;
+  }
   // Update operators if operatorIds provided
   if (Array.isArray(operatorIds)) {
     // Remove all existing operators and add new ones

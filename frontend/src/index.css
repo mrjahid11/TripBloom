@@ -228,3 +228,39 @@ html {
   40% { background-color: rgba(59,130,246,0.06); }
   100% { box-shadow: none; background-color: transparent; }
 }
+
+/* Custom scrollbar for chat messages */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 10px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #f97316;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #ea580c;
+  background-clip: content-box;
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-track {
+  background: #374151;
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #f97316;
+  background-clip: content-box;
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #ea580c;
+  background-clip: content-box;
+}

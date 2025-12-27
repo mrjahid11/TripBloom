@@ -10,6 +10,9 @@ const CustomerHistory = () => {
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [chatBooking, setChatBooking] = useState(null);
+  const [reviewedPackages, setReviewedPackages] = useState(new Set());
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewTargetBooking, setReviewTargetBooking] = useState(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -59,11 +62,72 @@ const CustomerHistory = () => {
     load();
   }, [user]);
 
+  // After history loads, check which packages the customer already reviewed
+  useEffect(() => {
+    const loadReviewed = async () => {
+      const userId = (user && user.id) || localStorage.getItem('userId');
+      if (!userId || history.length === 0) return;
+
+      const uniquePkgIds = Array.from(new Set(history.map(b => (b.packageId?._id || b.packageId || b.package?._id || b.package)))).filter(Boolean);
+      const reviewed = new Set();
+
+      await Promise.all(uniquePkgIds.map(async (pkgId) => {
+        try {
+          const res = await fetch(`/api/customers/${userId}/packages/${pkgId}/review`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && data.success && data.review) {
+            reviewed.add(pkgId.toString());
+          }
+        } catch (err) {
+          // ignore individual failures
+        }
+      }));
+
+      setReviewedPackages(new Set(Array.from(reviewed)));
+    };
+
+    loadReviewed();
+  }, [history, user]);
+
   const formatDate = (date) => {
     try {
       return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     } catch {
       return 'N/A';
+    }
+  };
+
+  const submitReview = async ({ booking, rating, comment }) => {
+    if (!booking) return;
+    const pkgId = booking.packageId?._id || booking.packageId || (booking.package?._id || booking.package);
+    const userId = (user && user.id) || localStorage.getItem('userId');
+    if (!userId) return alert('Please login to submit a review.');
+    if (!pkgId) return alert('Package information missing for this booking.');
+
+    try {
+      const res = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId: userId, packageId: pkgId, bookingId: booking._id || booking.id, rating, comment })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        // mark reviewed locally
+        setReviewedPackages(prev => {
+          const copy = new Set(Array.from(prev));
+          copy.add(pkgId.toString());
+          return copy;
+        });
+        setReviewModalOpen(false);
+        setReviewTargetBooking(null);
+        alert('Thanks — your review was submitted and is pending moderation.');
+      } else {
+        alert('Failed to submit review: ' + (data.message || JSON.stringify(data)));
+      }
+    } catch (err) {
+      console.error('Review submit error', err);
+      alert('Failed to submit review');
     }
   };
 
@@ -200,15 +264,31 @@ const CustomerHistory = () => {
                             Chat with Operator
                           </button>
                         )}
-                        {booking.status === 'COMPLETED' && (
-                          <button
-                            onClick={() => window.location.href = '/customer/reviews'}
-                            className="px-4 py-2 border-2 border-primary text-primary rounded-lg hover:bg-primary hover:text-white transition-colors flex items-center"
-                          >
-                            <FaStar className="mr-2" />
-                            Write Review
-                          </button>
-                        )}
+                        {booking.status === 'COMPLETED' && (() => {
+                          const pkgId = booking.packageId?._id || booking.packageId || (booking.package?._id || booking.package);
+                          const already = pkgId && reviewedPackages && reviewedPackages.has(pkgId.toString());
+                          if (already) {
+                            return (
+                              <button
+                                onClick={() => window.location.href = '/customer/reviews'}
+                                className="px-4 py-2 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors flex items-center"
+                              >
+                                <FaStar className="mr-2" />
+                                View Review
+                              </button>
+                            );
+                          }
+
+                          return (
+                            <button
+                              onClick={() => { setReviewTargetBooking(booking); setReviewModalOpen(true); }}
+                              className="px-4 py-2 border-2 border-primary text-primary rounded-lg hover:bg-primary hover:text-white transition-colors flex items-center"
+                            >
+                              <FaStar className="mr-2" />
+                              Write Review
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -236,6 +316,42 @@ const CustomerHistory = () => {
             booking={chatBooking}
             operator={chatBooking.assignedOperator}
           />
+        )}
+        {reviewModalOpen && reviewTargetBooking && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => { setReviewModalOpen(false); setReviewTargetBooking(null); }}></div>
+            <div className="relative z-10 w-full max-w-2xl bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6">
+              <h3 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">Write a Review</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{reviewTargetBooking.packageId?.title || reviewTargetBooking.package?.title || 'Package'}</p>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.target;
+                const rating = Number(form.rating.value);
+                const comment = form.comment.value.trim();
+                if (!rating || rating < 1 || rating > 5) { alert('Please provide a rating between 1 and 5'); return; }
+                await submitReview({ booking: reviewTargetBooking, rating, comment });
+              }}>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Rating</label>
+                  <select name="rating" defaultValue="5" className="px-3 py-2 rounded-lg w-32 bg-white dark:bg-gray-700 border">
+                    <option value="5">5 - Excellent</option>
+                    <option value="4">4 - Very good</option>
+                    <option value="3">3 - Good</option>
+                    <option value="2">2 - Fair</option>
+                    <option value="1">1 - Poor</option>
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Comment</label>
+                  <textarea name="comment" rows="4" className="w-full px-3 py-2 rounded-lg bg-white dark:bg-gray-700 border" required></textarea>
+                </div>
+                <div className="flex gap-3 justify-end">
+                  <button type="button" onClick={() => { setReviewModalOpen(false); setReviewTargetBooking(null); }} className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700">Cancel</button>
+                  <button type="submit" className="px-4 py-2 rounded-lg bg-primary text-white">Submit Review</button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -67,28 +67,41 @@ const BookingDetailModal = ({ booking, onClose, onUpdateNotes }) => {
               Customer Information
             </h3>
             <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Name</label>
-                <p className="text-gray-900 dark:text-white font-semibold">{booking.customerId?.name}</p>
-              </div>
-              <div>
-                <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Email</label>
-                <p className="text-gray-900 dark:text-white">{booking.customerId?.email}</p>
-              </div>
-              <div>
-                <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Phone</label>
-                <p className="text-gray-900 dark:text-white">{booking.customerId?.phone}</p>
-              </div>
-              <div>
-                <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Booking Type</label>
-                <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${
-                  booking.bookingType === 'GROUP' 
-                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                    : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-                }`}>
-                  {booking.bookingType}
-                </span>
-              </div>
+              {(() => {
+                // Resolve customer display values from possible shapes
+                const cust = booking.customerId || booking.customer || {};
+                const customerName = cust?.fullName || cust?.name || booking.customerName || (typeof cust === 'string' ? cust : null) || 'Customer';
+                const customerEmail = cust?.email || booking.customerEmail || '';
+                const customerPhone = cust?.phone || booking.customerPhone || '';
+
+                return (
+                  <>
+                    <div>
+                      <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Name</label>
+                      <p className="text-gray-900 dark:text-white font-semibold">{customerName}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Email</label>
+                      <p className="text-gray-900 dark:text-white">{customerEmail}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Phone</label>
+                      <p className="text-gray-900 dark:text-white">{customerPhone}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-semibold text-gray-600 dark:text-gray-400">Booking Type</label>
+                      <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${
+                        booking.bookingType === 'GROUP'
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                          : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                      }`}>
+                        {booking.bookingType}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
+              
             </div>
           </div>
 

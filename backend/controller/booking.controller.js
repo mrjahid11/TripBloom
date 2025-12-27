@@ -14,6 +14,7 @@ import {
   approveDateChange,
   rejectDateChange
 } from '../service/booking.service.js';
+import { checkInBooking } from '../service/booking.service.js';
 
 // Create a new booking
 export async function createBookingController(req, res) {
@@ -213,6 +214,23 @@ export async function addPaymentController(req, res) {
   });
 }
 
+// Customer check-in for a booking
+export async function checkInBookingController(req, res) {
+  try {
+    const { bookingId } = req.params;
+    const { userId } = req.body;
+
+    const result = await checkInBooking(bookingId, userId);
+    if (result.error) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    res.json({ success: true, message: 'Checked in successfully', booking: result.booking });
+  } catch (err) {
+    console.error('Check-in controller error:', err);
+    res.status(500).json({ success: false, message: 'Server error during check-in' });
+  }
+}
 // Get customer booking statistics
 export async function getCustomerStatsController(req, res) {
   const { customerId } = req.params;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaComments, FaPaperPlane, FaUsers, FaBullhorn, FaUser, FaSearch } from 'react-icons/fa';
 
-const MessagesAnnouncements = () => {
+const MessagesAnnouncements = ({ openBookingId }) => {
   const operatorId = localStorage.getItem('userId');
   const [activeTab, setActiveTab] = useState('conversations');
   const [conversations, setConversations] = useState([]);
@@ -11,6 +11,7 @@ const MessagesAnnouncements = () => {
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [selectedTour, setSelectedTour] = useState('');
   const [tours, setTours] = useState([]);
+  const [displayedMessageCount, setDisplayedMessageCount] = useState(7);
   const messagesEndRef = useRef(null);
   const previousMessagesCountRef = useRef(0);
 
@@ -24,6 +25,16 @@ const MessagesAnnouncements = () => {
     
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-open conversation if openBookingId is provided
+  useEffect(() => {
+    if (openBookingId && conversations.length > 0) {
+      const conv = conversations.find(c => c.bookingId === openBookingId);
+      if (conv) {
+        loadConversation(conv);
+      }
+    }
+  }, [openBookingId, conversations]);
 
   useEffect(() => {
     // Auto-refresh messages for selected conversation every 3 seconds
@@ -48,73 +59,109 @@ const MessagesAnnouncements = () => {
       // Fetch booking-based conversations (customer-operator 1-on-1)
       const bookingsRes = await fetch(`/api/bookings?assignedOperator=${operatorId}`);
       if (bookingsRes.ok) {
-        const bookingsData = await bookingsRes.json();
-        const bookings = Array.isArray(bookingsData) ? bookingsData : (bookingsData.bookings || []);
+      const bookingsData = await bookingsRes.json();
+      let bookings = Array.isArray(bookingsData) ? bookingsData : (bookingsData.bookings || []);
+      // Keep only group bookings (either explicit bookingType or groupDepartureId present)
+      bookings = bookings.filter(b => b.bookingType === 'GROUP' || b.groupDepartureId);
         
-        for (const booking of bookings) {
+      for (const booking of bookings) {
           // Fetch messages for this booking
           const msgRes = await fetch(`/api/messages/booking/${booking._id}`);
           const msgData = await msgRes.json();
           
           if (msgData.success && Array.isArray(msgData.messages) && msgData.messages.length > 0) {
-            const lastMsg = msgData.messages[msgData.messages.length - 1];
-            allConvs.push({
-              id: `booking-${booking._id}`,
-              bookingId: booking._id,
-              tourName: booking.packageId?.title || 'Tour Package',
-              customerId: booking.customerId?._id || booking.customerId,
-              customerName: booking.customerId?.fullName || booking.customerId?.name || 'Customer',
-              lastMessage: lastMsg.content,
-              timestamp: new Date(lastMsg.sentAt),
-              unread: 0, // Could implement unread logic
-              type: 'booking'
-            });
-          } else if (booking.customerId) {
-            // Show conversation even if no messages yet
-            allConvs.push({
-              id: `booking-${booking._id}`,
-              bookingId: booking._id,
-              tourName: booking.packageId?.title || 'Tour Package',
-              customerId: booking.customerId?._id || booking.customerId,
-              customerName: booking.customerId?.fullName || booking.customerId?.name || 'Customer',
-              lastMessage: 'No messages yet',
-              timestamp: new Date(booking.createdAt),
-              unread: 0,
-              type: 'booking'
-            });
-          }
+              // Find the most recent message that involves this operator (sender or recipient)
+              const messagesArr = msgData.messages;
+              let lastMsg = null;
+              for (let i = messagesArr.length - 1; i >= 0; i--) {
+                const m = messagesArr[i];
+                const sId = m.senderId?._id || m.senderId;
+                const rId = m.recipientId?._id || m.recipientId;
+                if (String(sId) === String(operatorId) || String(rId) === String(operatorId)) {
+                  lastMsg = m;
+                  break;
+                }
+              }
+              if (lastMsg) {
+                allConvs.push({
+                  id: `booking-${booking._id}`,
+                  bookingId: booking._id,
+                  tourName: booking.packageId?.title || 'Tour Package',
+                  customerId: booking.customerId?._id || booking.customerId,
+                  customerName: booking.customerId?.fullName || booking.customerId?.name || 'Customer',
+                  assignedOperator: booking.assignedOperator?._id || booking.assignedOperator,
+                  lastMessage: lastMsg.content || 'No messages yet',
+                  timestamp: new Date(lastMsg.sentAt),
+                  unread: 0,
+                  type: 'booking'
+                });
+              } else if (booking.customerId) {
+                // No operator-involved messages; show as empty for this operator
+                allConvs.push({
+                  id: `booking-${booking._id}`,
+                  bookingId: booking._id,
+                  tourName: booking.packageId?.title || 'Tour Package',
+                  customerId: booking.customerId?._id || booking.customerId,
+                  customerName: booking.customerId?.fullName || booking.customerId?.name || 'Customer',
+                  assignedOperator: booking.assignedOperator?._id || booking.assignedOperator,
+                  lastMessage: 'No messages yet',
+                  timestamp: new Date(booking.createdAt),
+                  unread: 0,
+                  type: 'booking'
+                });
+              }
+            } else if (booking.customerId) {
+              // Show conversation even if no messages yet
+              allConvs.push({
+                id: `booking-${booking._id}`,
+                bookingId: booking._id,
+                tourName: booking.packageId?.title || 'Tour Package',
+                customerId: booking.customerId?._id || booking.customerId,
+                customerName: booking.customerId?.fullName || booking.customerId?.name || 'Customer',
+                assignedOperator: booking.assignedOperator?._id || booking.assignedOperator,
+                lastMessage: 'No messages yet',
+                timestamp: new Date(booking.createdAt),
+                unread: 0,
+                type: 'booking'
+              });
+            }
         }
       }
       
-      // Fetch tour-based messages (legacy/group announcements)
+      // Fetch tour-based messages (group announcements / direct messages on tours)
       for (const tour of data.groupDepartures || []) {
         const msgRes = await fetch(`/api/messages?tourId=${tour._id}`);
         const msgData = await msgRes.json();
         if (msgData.success && Array.isArray(msgData.messages)) {
           for (const msg of msgData.messages) {
-            const customerId = msg.recipientId?._id || msg.senderId?._id;
-            if (customerId && customerId !== operatorId) {
-              allConvs.push({
-                id: `tour-${tour._id}-${customerId}`,
-                tourId: tour._id,
-                tourName: tour.packageId?.title || 'Tour',
-                customerId: customerId,
-                customerName: msg.recipientId?.fullName || msg.senderId?.fullName || 'Unknown',
-                lastMessage: msg.content,
-                timestamp: new Date(msg.sentAt),
-                unread: 0,
-                type: 'tour'
-              });
-            }
+            const senderId = msg.senderId?._id || msg.senderId;
+            const recipientId = msg.recipientId?._id || msg.recipientId;
+            // Only include messages where this operator is a participant (sender or recipient)
+            if (senderId !== operatorId && recipientId !== operatorId) continue;
+            // determine the customer participant (the non-operator)
+            const customerId = senderId === operatorId ? recipientId : senderId;
+            if (!customerId || customerId === operatorId) continue;
+            const customerName = (msg.recipientId?._id === customerId ? msg.recipientId?.fullName : msg.senderId?.fullName) || 'Unknown';
+            allConvs.push({
+              id: `tour-${tour._id}-${customerId}-${operatorId}`,
+              tourId: tour._id,
+              tourName: tour.packageId?.title || 'Tour',
+              customerId: customerId,
+              customerName,
+              lastMessage: msg.content,
+              timestamp: new Date(msg.sentAt),
+              unread: 0,
+              type: 'tour'
+            });
           }
         }
       }
       
-      // Remove duplicates and sort by timestamp
+      // Remove duplicates (use conv.id which is unique per operator/tour/booking) and sort by timestamp
       const uniqueConvs = [];
       const seen = new Set();
       for (const conv of allConvs) {
-        const key = conv.bookingId ? `booking-${conv.bookingId}` : `${conv.customerId}-${conv.tourId}`;
+        const key = conv.bookingId ? `booking-${conv.bookingId}` : conv.id;
         if (!seen.has(key)) {
           uniqueConvs.push(conv);
           seen.add(key);
@@ -124,7 +171,14 @@ const MessagesAnnouncements = () => {
       // Sort by timestamp descending
       uniqueConvs.sort((a, b) => b.timestamp - a.timestamp);
       
+      // Update conversations list
       setConversations(uniqueConvs);
+      
+      // If there's a selected conversation, update it with latest data (match by id to avoid switching)
+      if (selectedConversation) {
+        const updatedSelected = uniqueConvs.find(c => c.id === selectedConversation.id);
+        if (updatedSelected) setSelectedConversation(updatedSelected);
+      }
     } catch (error) {
       console.error('Error:', error);
     }
@@ -132,6 +186,7 @@ const MessagesAnnouncements = () => {
 
   const loadConversation = async (conv) => {
     setSelectedConversation(conv);
+    setDisplayedMessageCount(7); // Reset to show only 7 messages
     previousMessagesCountRef.current = 0; // Reset count for new conversation
     await loadConversationMessages(conv, true); // Initial load with scroll
     setConversations(conversations.map(c => c.id === conv.id ? { ...c, unread: 0 } : c));
@@ -148,18 +203,38 @@ const MessagesAnnouncements = () => {
     if (conv.type === 'booking' && conv.bookingId) {
       const res = await fetch(`/api/messages/booking/${conv.bookingId}`);
       const data = await res.json();
-      fetchedMessages = (data.messages || []).map(msg => ({
+      const msgs = data.messages || [];
+      // If this operator is the assigned operator for the booking, show the full thread.
+      // Otherwise filter to only messages that involve this operator (sender or recipient).
+      let filtered = msgs;
+      if (conv.assignedOperator && String(conv.assignedOperator) === String(operatorId)) {
+        filtered = msgs;
+      } else {
+        filtered = msgs.filter(msg => {
+          const sId = msg.senderId?._id || msg.senderId;
+          const rId = msg.recipientId?._id || msg.recipientId;
+          return String(sId) === String(operatorId) || String(rId) === String(operatorId);
+        });
+      }
+      fetchedMessages = filtered.map(msg => ({
         id: msg._id,
-        sender: msg.senderId?._id === operatorId || msg.senderId === operatorId ? 'operator' : 'customer',
+        sender: (msg.senderId?._id || msg.senderId) === operatorId ? 'operator' : 'customer',
         text: msg.content,
         timestamp: new Date(msg.sentAt)
       }));
     } else if (conv.tourId) {
-      const res = await fetch(`/api/messages?tourId=${conv.tourId}&recipientId=${conv.customerId}`);
+      const res = await fetch(`/api/messages?tourId=${conv.tourId}`);
       const data = await res.json();
-      fetchedMessages = (data.messages || []).map(msg => ({
+      const msgs = data.messages || [];
+      // Keep only messages between this operator and the conversation customer
+      const filtered = msgs.filter(msg => {
+        const sId = msg.senderId?._id || msg.senderId;
+        const rId = msg.recipientId?._id || msg.recipientId;
+        return (sId === operatorId && rId === conv.customerId) || (rId === operatorId && sId === conv.customerId);
+      });
+      fetchedMessages = filtered.map(msg => ({
         id: msg._id,
-        sender: msg.senderId === operatorId ? 'operator' : 'customer',
+        sender: (msg.senderId?._id || msg.senderId) === operatorId ? 'operator' : 'customer',
         text: msg.content,
         timestamp: new Date(msg.sentAt)
       }));
@@ -263,16 +338,9 @@ const MessagesAnnouncements = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
-          <FaComments className="mr-3 text-orange-600" />
-          Messages & Announcements
-        </h1>
-      </div>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700">
-        <div className="border-b border-gray-200 dark:border-gray-700">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 flex-1 flex flex-col min-h-0">
+        <div className="border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <div className="flex">
             <button
               onClick={() => setActiveTab('conversations')}
@@ -295,88 +363,163 @@ const MessagesAnnouncements = () => {
             </button>
           </div>
         </div>
-        <div className="p-6">
-          {/* Conversations Tab */}
+        <div className="flex-1 min-h-0 overflow-hidden">{/* Conversations Tab */}
           {activeTab === 'conversations' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 h-[calc(100vh-12rem)]">
               {/* Conversation List */}
-              <div className="lg:col-span-1 space-y-2">
-                <div className="relative mb-4">
-                  <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search conversations..."
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  />
+              <div className="lg:col-span-1 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 flex flex-col h-full max-h-full overflow-hidden">
+                <div className="bg-gray-50 dark:bg-gray-900/50 p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                  <div className="relative">
+                    <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search conversations..."
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    />
+                  </div>
                 </div>
-                {conversations.length === 0 ? (
-                  <p className="text-gray-600 dark:text-gray-400 text-center py-8">No conversations yet</p>
-                ) : (
-                  conversations.map(conv => (
-                    <button
-                      key={conv.customerId + '-' + conv.tourId}
-                      onClick={() => loadConversation(conv)}
-                      className={`w-full text-left p-4 rounded-lg border-2 transition-all ${selectedConversation?.customerId === conv.customerId && selectedConversation?.tourId === conv.tourId ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-500' : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-orange-300'}`}
-                    >
-                      <div className="flex justify-between items-start mb-1">
-                        <h4 className="font-bold text-gray-900 dark:text-white">{conv.customerName}</h4>
-                        {conv.unread > 0 && (
-                          <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{conv.unread}</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{conv.tourName}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{conv.lastMessage}</p>
-                      <p className="text-xs text-gray-400 mt-1">{formatTime(conv.timestamp)}</p>
-                    </button>
-                  ))
-                )}
+                <div className="divide-y divide-gray-200 dark:divide-gray-700 flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-orange-500 scrollbar-track-gray-200 dark:scrollbar-track-gray-700">
+                  {conversations.length === 0 ? (
+                    <div className="p-8 text-center text-gray-600 dark:text-gray-400">
+                      <FaUser className="text-5xl mx-auto mb-3 opacity-30" />
+                      <p className="font-medium">No conversations yet</p>
+                      <p className="text-sm mt-1">Messages from customers will appear here</p>
+                    </div>
+                  ) : (
+                    conversations.map(conv => (
+                        <button
+                          key={conv.id}
+                        onClick={() => loadConversation(conv)}
+                        className={`w-full text-left p-4 transition-all hover:bg-white dark:hover:bg-gray-800 ${
+                          selectedConversation?.customerId === conv.customerId && selectedConversation?.tourId === conv.tourId 
+                            ? 'bg-white dark:bg-gray-800 border-l-4 border-orange-600' 
+                            : 'border-l-4 border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0 ${
+                              selectedConversation?.customerId === conv.customerId ? 'bg-orange-600' : 'bg-gradient-to-br from-orange-500 to-orange-600'
+                            }`}>
+                              {conv.customerName.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-gray-900 dark:text-white text-base truncate">{conv.customerName}</h4>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 truncate flex items-center gap-1">
+                                <FaComments className="text-[10px]" />
+                                {conv.tourName}
+                              </p>
+                            </div>
+                          </div>
+                          {conv.unread > 0 && (
+                            <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold flex-shrink-0">{conv.unread}</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 truncate ml-15">{conv.lastMessage}</p>
+                        <p className="text-xs text-gray-400 mt-1 ml-15">{formatTime(conv.timestamp)}</p>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
               {/* Chat Area */}
-              <div className="lg:col-span-2 border-2 border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
+              <div className="lg:col-span-2 flex flex-col bg-white dark:bg-gray-800 h-full min-h-0">
                 {!selectedConversation ? (
-                  <div className="flex items-center justify-center h-96">
+                  <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <FaComments className="text-6xl text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-600 dark:text-gray-400">Select a conversation to start messaging</p>
+                      <div className="w-24 h-24 rounded-full bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-900 dark:to-orange-800 flex items-center justify-center mx-auto mb-4">
+                        <FaComments className="text-4xl text-orange-600 dark:text-orange-400" />
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No Conversation Selected</h3>
+                      <p className="text-gray-600 dark:text-gray-400">Choose a conversation from the list to start messaging</p>
                     </div>
                   </div>
                 ) : (
                   <>
                     {/* Chat Header */}
-                    <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white p-4">
-                      <h3 className="font-bold text-lg">{selectedConversation.customerName}</h3>
-                      <p className="text-sm text-orange-100">{selectedConversation.tourName}</p>
+                    <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-6 py-4 shadow-lg flex-shrink-0">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-white font-bold text-lg">
+                          {selectedConversation.customerName.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-xl">{selectedConversation.customerName}</h3>
+                          <p className="text-sm text-orange-100 flex items-center gap-2">
+                            <FaComments className="text-xs" />
+                            {selectedConversation.tourName}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                     {/* Messages */}
-                    <div className="h-96 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900">
-                      <div className="space-y-3">
-                        {messages.map(msg => (
-                          <div key={msg.id} className={`flex ${msg.sender === 'operator' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[70%] px-4 py-2 rounded-lg ${msg.sender === 'operator' ? 'bg-orange-600 text-white' : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white'}`}>
-                              <p>{msg.text}</p>
-                              <p className={`text-xs mt-1 ${msg.sender === 'operator' ? 'text-orange-100' : 'text-gray-500'}`}>{msg.timestamp.toLocaleTimeString()}</p>
+                    <div className="flex-1 overflow-y-auto bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 min-h-0 scrollbar-thin scrollbar-thumb-orange-500 scrollbar-track-gray-200 dark:scrollbar-track-gray-700 hover:scrollbar-thumb-orange-600">
+                      <div className="p-6 max-w-4xl mx-auto">
+                        {messages.length === 0 ? (
+                          <div className="flex items-center justify-center min-h-[400px]">
+                            <div className="text-center text-gray-500 dark:text-gray-400">
+                              <FaComments className="text-5xl mx-auto mb-3 opacity-30" />
+                              <p className="font-medium">No messages yet</p>
+                              <p className="text-sm mt-1">Start the conversation below</p>
                             </div>
                           </div>
-                        ))}
-                        <div ref={messagesEndRef} />
+                        ) : (
+                          <div className="space-y-4">
+                            {/* Load More Button */}
+                            {messages.length > displayedMessageCount && (
+                              <div className="text-center mb-4">
+                                <button
+                                  onClick={() => setDisplayedMessageCount(prev => Math.min(prev + 10, messages.length))}
+                                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors shadow-md"
+                                >
+                                  Load {Math.min(10, messages.length - displayedMessageCount)} older messages
+                                </button>
+                              </div>
+                            )}
+                            
+                            {/* Display limited messages */}
+                            {messages.slice(-displayedMessageCount).map(msg => (
+                              <div key={msg.id} className={`flex mb-4 ${msg.sender === 'operator' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`group flex items-end gap-2 max-w-[75%] ${msg.sender === 'operator' ? 'flex-row-reverse' : 'flex-row'}`}>
+                                  {msg.sender !== 'operator' && (
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                                      {selectedConversation.customerName.charAt(0).toUpperCase()}
+                                    </div>
+                                  )}
+                                  <div className={`px-5 py-3 rounded-2xl shadow-md ${
+                                    msg.sender === 'operator' 
+                                      ? 'bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-br-sm' 
+                                      : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 rounded-bl-sm'
+                                  }`}>
+                                    <p className="text-[15px] leading-relaxed">{msg.text}</p>
+                                    <p className={`text-[11px] mt-1.5 ${msg.sender === 'operator' ? 'text-orange-100' : 'text-gray-500 dark:text-gray-400'}`}>
+                                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                            <div ref={messagesEndRef} />
+                          </div>
+                        )}
                       </div>
                     </div>
                     {/* Input */}
-                    <div className="bg-white dark:bg-gray-800 p-4 border-t border-gray-200 dark:border-gray-700">
-                      <div className="flex gap-2">
+                    <div className="bg-white dark:bg-gray-800 px-6 py-4 border-t border-gray-200 dark:border-gray-700 shadow-lg flex-shrink-0">
+                      <div className="flex gap-3 max-w-4xl mx-auto">
                         <input
                           type="text"
                           value={newMessage}
                           onChange={(e) => setNewMessage(e.target.value)}
-                          onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                          onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
                           placeholder="Type your message..."
-                          className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                          className="flex-1 px-5 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-orange-500 focus:ring-2 focus:ring-orange-200 dark:focus:ring-orange-900 transition-all"
                         />
                         <button
                           onClick={sendMessage}
-                          className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-semibold flex items-center"
+                          disabled={!newMessage.trim()}
+                          className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white rounded-xl font-semibold flex items-center gap-2 shadow-lg hover:shadow-xl transition-all"
                         >
-                          <FaPaperPlane className="mr-2" />
+                          <FaPaperPlane />
                           Send
                         </button>
                       </div>

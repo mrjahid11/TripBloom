@@ -24,6 +24,37 @@ const groupDepartureSchema = new mongoose.Schema({
     bookedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking' }
   }],
+  // Track checked-in state per seat (optional)
+  // Each seatMap entry may include a `checkedIn` boolean in practice; a flag here allows quick checks
+  seatMapChecked: { type: Boolean, default: false },
+  // Optional safety checklist stored for the departure
+  safetyChecklist: {
+    firstAid: { type: Boolean, default: false },
+    vehicleDocs: { type: Boolean, default: false },
+    foodHygiene: { type: Boolean, default: false },
+    emergencyContacts: { type: Boolean, default: false },
+    routePlanned: { type: Boolean, default: false }
+  },
+  // Day-wise itinerary stored with stop statuses
+  itinerary: {
+    type: [
+      {
+        day: Number,
+        stops: [
+          {
+            time: String,
+            name: String,
+            location: String,
+            status: { type: String, enum: ['pending', 'completed'], default: 'pending' },
+            notes: String
+          }
+        ]
+      }
+    ],
+    default: []
+  },
+  // Indicator that the tour has been marked started by operator
+  tourStarted: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 

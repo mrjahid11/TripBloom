@@ -41,29 +41,137 @@ const DepartureDetailPage = ({ departure, onBack }) => {
 
   useEffect(() => {
     fetchPassengers();
-    fetchItinerary();
+    // initialize safety checklist / itinerary / tourStarted from departure payload if present
+    if (departure) {
+      if (departure.itinerary && Array.isArray(departure.itinerary) && departure.itinerary.length > 0) {
+        setItinerary(departure.itinerary);
+      } else {
+        fetchItinerary();
+      }
+      if (departure.safetyChecklist) {
+        setSafetyChecklist({ ...safetyChecklist, ...departure.safetyChecklist });
+      }
+      if (typeof departure.tourStarted === 'boolean') setTourStarted(departure.tourStarted);
+    } else {
+      fetchItinerary();
+    }
     initializeSeatMap();
   }, [departure]);
 
+  // Helper to persist departure updates
+  const saveDepartureUpdates = async (payload = {}) => {
+    if (!departure || !departure._id) return;
+    try {
+      const res = await fetch(`/api/admin/group-departures/${departure._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error('Failed to save departure updates', txt);
+      } else {
+        // Optionally update local departure object if needed
+        const json = await res.json();
+        // console.log('Saved departure update:', json);
+      }
+    } catch (err) {
+      console.error('Error saving departure updates', err);
+    }
+  };
   const fetchPassengers = async () => {
-    // Mock data - replace with actual API call
-    const mockPassengers = Array.from({ length: departure.bookedSeats || 0 }, (_, i) => ({
-      id: i + 1,
-      name: `Traveler ${i + 1}`,
-      bookingId: `BK${1000 + i}`,
-      phone: `+880 17${Math.floor(Math.random() * 100000000)}`,
-      paymentStatus: Math.random() > 0.2 ? 'PAID' : 'PENDING',
-      seatNumber: i + 1,
-      emergencyContact: Math.random() > 0.8 ? null : `+880 18${Math.floor(Math.random() * 100000000)}`
-    }));
-    setPassengers(mockPassengers);
-    
-    // Initialize check-in status
-    const checkinStatus = {};
-    mockPassengers.forEach(p => {
-      checkinStatus[p.id] = false;
-    });
-    setCheckedIn(checkinStatus);
+    if (!departure || !departure._id) return;
+
+    try {
+      // Fetch all bookings to compute per-package sequences for display ids
+      const allRes = await fetch('/api/bookings');
+      const allJson = await allRes.json();
+      const allBookings = Array.isArray(allJson.bookings) ? allJson.bookings : allJson.bookings || [];
+
+      // Build package -> bookings map (all bookings) to compute sequence numbers
+      const byPackage = {};
+      allBookings.forEach(b => {
+        const pkgId = b.packageId?._id || b.packageId;
+        if (!pkgId) return;
+        const key = pkgId.toString();
+        byPackage[key] = byPackage[key] || [];
+        byPackage[key].push(b);
+      });
+
+      // Sort each package list by createdAt ascending so sequence is deterministic
+      Object.keys(byPackage).forEach(k => {
+        byPackage[k].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      });
+
+      // Now filter bookings for this departure
+      const bookingsRes = await fetch(`/api/bookings?groupDepartureId=${departure._id}`);
+      const bookingsJson = await bookingsRes.json();
+      const bookings = Array.isArray(bookingsJson.bookings) ? bookingsJson.bookings : bookingsJson.bookings || [];
+
+      // Attach displayId to bookings
+      const withDisplay = bookings.map(b => {
+        const pkg = b.packageId || {};
+        const pkgId = pkg._id || pkg;
+        const list = pkgId ? byPackage[pkgId.toString()] || [] : [];
+        const index = list.findIndex(x => (x._id || x).toString() === (b._id || b).toString());
+        const seq = index >= 0 ? index + 1 : 1;
+
+        const pkgCode = pkg.packageCode || pkg.code || pkg.shortCode || pkg.packageIdCode;
+        let prefix;
+        if (pkgCode) {
+          prefix = pkgCode.toString().toUpperCase();
+        } else if (pkg.title) {
+          const words = pkg.title.split(/\s+/).filter(Boolean);
+          const a = (words[0] || '').charAt(0) || 'X';
+          const b2 = (words[1] || words[0] || '').charAt(0) || 'X';
+          prefix = (a + b2).toUpperCase() + '000';
+        } else {
+          prefix = 'TB000';
+        }
+
+        return { ...b, _displayId: `${prefix}${seq}` };
+      });
+
+      // Filter out cancelled and pending bookings (do not show those passengers)
+      const visibleBookings = withDisplay.filter(b => {
+        const st = (b.status || '').toString().toUpperCase();
+        return st !== 'CANCELLED' && st !== 'PENDING';
+      });
+
+      // Flatten travelers from visible bookings into passenger rows
+      const rows = [];
+      visibleBookings.forEach(booking => {
+        const bookingId = booking._displayId || booking._id;
+        const reserved = Array.isArray(booking.reservedSeats) ? booking.reservedSeats : [];
+        const paymentSuccess = Array.isArray(booking.payments) && booking.payments.some(p => p.status === 'SUCCESS');
+
+        (booking.travelers || []).forEach((traveler, idx) => {
+          const seatRaw = reserved[idx] ?? null;
+          const seatNumber = seatRaw ? Number(seatRaw) || seatRaw : rows.length + 1; // fallback sequential
+
+          rows.push({
+            id: `${booking._id}-${idx}`,
+            name: traveler.fullName || traveler.name || `${traveler.firstName || ''} ${traveler.lastName || ''}`.trim() || 'Guest',
+            bookingId,
+            phone: traveler.phone || booking.customerPhone || booking.customerId?.phone || '',
+            paymentStatus: paymentSuccess ? 'PAID' : (booking.status || 'PENDING'),
+            seatNumber,
+            emergencyContact: traveler.phoneEmergency || traveler.emergencyContact || null
+          });
+        });
+      });
+
+      setPassengers(rows);
+
+      // Initialize check-in status (all false by default)
+      const checkinStatus = {};
+      rows.forEach(p => { checkinStatus[p.id] = false; });
+      setCheckedIn(checkinStatus);
+    } catch (err) {
+      // fallback: empty
+      setPassengers([]);
+      setCheckedIn({});
+    }
   };
 
   const fetchItinerary = () => {
@@ -116,16 +224,35 @@ const DepartureDetailPage = ({ departure, onBack }) => {
   }, [passengers, checkedIn]);
 
   const handleCheckIn = (passengerId) => {
-    setCheckedIn(prev => ({ ...prev, [passengerId]: !prev[passengerId] }));
+    setCheckedIn(prev => {
+      const next = { ...prev, [passengerId]: !prev[passengerId] };
+      // update seatMap entries to reflect checked state and persist
+      const flat = seatMap.flat().filter(Boolean).map(s => ({ ...s }));
+      const p = passengers.find(x => x.id === passengerId);
+      if (p) {
+        for (const seat of flat) {
+          if (Number(seat.number) === Number(p.seatNumber)) {
+            seat.status = next[passengerId] ? 'booked-checked' : 'booked';
+            seat.checkedIn = !!next[passengerId];
+          }
+        }
+        // send updated seatMap to server (flattened)
+        const seatMapPayload = flat.map(s => ({ seatNumber: s.number, status: s.status, checkedIn: s.checkedIn }));
+        saveDepartureUpdates({ seatMap: seatMapPayload, seatMapChecked: true });
+      }
+      return next;
+    });
   };
 
   const handleMarkAllPresent = () => {
     if (window.confirm('Are you sure you want to mark all passengers as present?')) {
       const allChecked = {};
-      passengers.forEach(p => {
-        allChecked[p.id] = true;
-      });
+      passengers.forEach(p => { allChecked[p.id] = true; });
       setCheckedIn(allChecked);
+      // Update seatMap
+      const flat = seatMap.flat().filter(Boolean).map(s => ({ ...s }));
+      const seatMapPayload = flat.map(s => ({ seatNumber: s.number, status: s.passenger ? 'booked-checked' : s.status, checkedIn: !!s.passenger }));
+      saveDepartureUpdates({ seatMap: seatMapPayload, seatMapChecked: true });
     }
   };
 
@@ -134,22 +261,26 @@ const DepartureDetailPage = ({ departure, onBack }) => {
     alert(`Sending reminder to ${notCheckedIn.length} passengers who haven't checked in.`);
   };
 
-  const handleStartTour = () => {
+  const handleStartTour = async () => {
     const allChecklistDone = Object.values(safetyChecklist).every(v => v);
     if (!allChecklistDone) {
       alert('⚠️ Complete mandatory safety checks before starting the tour!');
       setActiveTab('checklist');
       return;
     }
-    
+
     if (window.confirm('Mark tour as started?')) {
       setTourStarted(true);
+      await saveDepartureUpdates({ safetyChecklist, tourStarted: true });
       alert('✅ Tour started successfully!');
     }
   };
 
-  const handleCompleteTour = () => {
+  const handleCompleteTour = async () => {
     if (window.confirm('Mark tour as completed?')) {
+      // mark tourStarted false and set status to CLOSED
+      setTourStarted(false);
+      await saveDepartureUpdates({ tourStarted: false, status: 'CLOSED' });
       alert('✅ Tour completed successfully!');
       onBack();
     }
@@ -158,9 +289,18 @@ const DepartureDetailPage = ({ departure, onBack }) => {
   const handleStopAction = (stopIndex, dayIndex) => {
     const newItinerary = [...itinerary];
     const currentStatus = newItinerary[dayIndex].stops[stopIndex].status;
-    newItinerary[dayIndex].stops[stopIndex].status = 
-      currentStatus === 'completed' ? 'pending' : 'completed';
+    newItinerary[dayIndex].stops[stopIndex].status = currentStatus === 'completed' ? 'pending' : 'completed';
     setItinerary(newItinerary);
+    // persist
+    saveDepartureUpdates({ itinerary: newItinerary });
+  };
+
+  const handleToggleChecklist = (key) => {
+    setSafetyChecklist(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      saveDepartureUpdates({ safetyChecklist: next });
+      return next;
+    });
   };
 
   const handleDelayStop = (stopIndex, dayIndex) => {
@@ -493,30 +633,22 @@ const DepartureDetailPage = ({ departure, onBack }) => {
                   foodHygiene: 'Food hygiene checked',
                   emergencyContacts: 'Emergency contacts verified',
                   routePlanned: 'Route planned and reviewed'
-                }).map(([key, label]) => (
-                  <div 
-                    key={key}
-                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                      safetyChecklist[key]
-                        ? 'bg-green-50 dark:bg-green-900/20 border-green-500'
-                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600'
-                    }`}
-                    onClick={() => setSafetyChecklist(prev => ({ ...prev, [key]: !prev[key] }))}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-gray-900 dark:text-white">{label}</span>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                        safetyChecklist[key] ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
-                      }`}>
-                        {safetyChecklist[key] ? (
-                          <FaCheckCircle className="text-white" />
-                        ) : (
-                          <FaTimesCircle className="text-white" />
-                        )}
+                }).map(([key, label]) => {
+                  const checked = !!safetyChecklist[key];
+                  const containerClass = `p-4 rounded-lg border-2 cursor-pointer transition-all ${checked ? 'bg-green-50 dark:bg-green-900/20 border-green-500' : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600'}`;
+                  const badgeClass = `w-8 h-8 rounded-full flex items-center justify-center ${checked ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'}`;
+
+                  return (
+                    <div key={key} className={containerClass} onClick={() => handleToggleChecklist(key)}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-gray-900 dark:text-white">{label}</span>
+                        <div className={badgeClass}>
+                          {checked ? <FaCheckCircle className="text-white" /> : <FaTimesCircle className="text-white" />}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Incident Log</h2>

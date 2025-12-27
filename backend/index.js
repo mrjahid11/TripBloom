@@ -138,6 +138,7 @@ import {
   addPaymentController,
   getCustomerStatsController,
   completeBookingController,
+  checkInBookingController,
   cancelUnpaidBookingsController,
   processRefundController,
   requestDateChangeController,
@@ -153,6 +154,7 @@ app.post('/api/bookings/:bookingId/request-date-change', requestDateChangeContro
 app.post('/api/bookings/:bookingId/payment', addPaymentController); // Add payment
 app.get('/api/customers/:customerId/stats', getCustomerStatsController); // Customer stats
 app.post('/api/bookings/:bookingId/complete', completeBookingController); // Mark booking complete
+app.post('/api/bookings/:bookingId/checkin', checkInBookingController); // Customer check-in
 app.post('/api/admin/bookings/cancel-unpaid', cancelUnpaidBookingsController); // Cancel unpaid expired bookings
 app.post('/api/admin/bookings/:bookingId/refund', processRefundController); // Process refund (Admin)
 app.post('/api/admin/bookings/:bookingId/approve-date-change', approveDateChangeController); // Approve date change (Admin)

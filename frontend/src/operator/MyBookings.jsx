@@ -29,41 +29,66 @@ const MyBookings = () => {
       const deptRes = await fetch(`/api/operator/${operatorId}/dashboard`);
       if (!deptRes.ok) throw new Error('Failed to fetch departures');
       const deptData = await deptRes.json();
-      
-      // Mock bookings data - in real implementation, fetch from backend
-      // Filter bookings by operator's assigned departure IDs
-      const departureIds = (deptData.groupDepartures || []).map(d => d._id);
-      
-      const mockBookings = Array.from({ length: 15 }, (_, i) => {
-        const isGroup = Math.random() > 0.3;
-        const departure = deptData.groupDepartures[Math.floor(Math.random() * deptData.groupDepartures.length)];
-        
-        return {
-          _id: `BK${1000 + i}`,
-          customerId: { name: `Customer ${i + 1}`, email: `customer${i + 1}@email.com`, phone: `+880 17${Math.floor(Math.random() * 100000000)}` },
-          packageId: departure?.packageId || { title: 'Tour Package', destination: 'Destination' },
-          bookingType: isGroup ? 'GROUP' : 'PRIVATE',
-          groupDepartureId: isGroup ? departure : null,
-          startDate: departure?.startDate || new Date(),
-          endDate: departure?.endDate || new Date(),
-          numTravelers: Math.floor(Math.random() * 5) + 1,
-          travelers: Array.from({ length: Math.floor(Math.random() * 5) + 1 }, (_, j) => ({
-            fullName: `Traveler ${j + 1}`,
-            age: 20 + Math.floor(Math.random() * 40),
-            phone: `+880 18${Math.floor(Math.random() * 100000000)}`
-          })),
-          totalAmount: 5000 + Math.floor(Math.random() * 20000),
-          status: ['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED'][Math.floor(Math.random() * 4)],
-          payments: [
-            { amount: 2000, status: 'SUCCESS', method: 'BKASH', paidAt: new Date() }
-          ],
-          cancellation: { isCancelled: Math.random() > 0.9 },
-          createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
-          operatorNotes: ''
-        };
+      // Fetch bookings from backend and filter to operator's departures or assignedOperator
+      const bookingsRes = await fetch('/api/bookings');
+      if (!bookingsRes.ok) throw new Error('Failed to fetch bookings');
+      const bookingsData = await bookingsRes.json();
+      const allBookings = bookingsData.bookings || [];
+
+      const departureIds = (deptData.groupDepartures || []).map(d => d._id?.toString());
+
+      // Filter bookings: only group bookings (by bookingType or groupDepartureId) that are for this operator
+      const operatorBookings = allBookings.filter(b => {
+        const assignedOp = b.assignedOperator?._id || b.assignedOperator;
+        const groupId = b.groupDepartureId?._id || b.groupDepartureId;
+        const isGroup = (b.bookingType === 'GROUP') || (groupId);
+        if (!isGroup) return false;
+        const groupMatch = groupId && departureIds.includes(groupId.toString());
+        const assignedMatch = assignedOp && assignedOp.toString() === operatorId;
+        return groupMatch || assignedMatch;
       });
-      
-      setBookings(mockBookings);
+
+      // Build package -> bookings map (all bookings) to compute sequence numbers
+      const byPackage = {};
+      allBookings.forEach(b => {
+        const pkgId = b.packageId?._id || b.packageId;
+        if (!pkgId) return;
+        const key = pkgId.toString();
+        byPackage[key] = byPackage[key] || [];
+        byPackage[key].push(b);
+      });
+
+      // Sort each package list by createdAt ascending so sequence is deterministic
+      Object.keys(byPackage).forEach(k => {
+        byPackage[k].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      });
+
+      // Attach displayId to operator bookings
+      const withDisplay = operatorBookings.map(b => {
+        const pkg = b.packageId || {};
+        const pkgId = pkg._id || pkg;
+        const list = pkgId ? byPackage[pkgId.toString()] || [] : [];
+        const index = list.findIndex(x => (x._id || x) .toString() === (b._id || b).toString());
+        const seq = index >= 0 ? index + 1 : 1;
+
+        // Prefer explicit package code if available
+        const pkgCode = pkg.packageCode || pkg.code || pkg.shortCode || pkg.packageIdCode;
+        let prefix;
+        if (pkgCode) {
+          prefix = pkgCode.toString().toUpperCase();
+        } else if (pkg.title) {
+          const words = pkg.title.split(/\s+/).filter(Boolean);
+          const a = (words[0] || '').charAt(0) || 'X';
+          const b = (words[1] || words[0] || '').charAt(0) || 'X';
+          prefix = (a + b).toUpperCase() + '000';
+        } else {
+          prefix = 'TB000';
+        }
+
+        return { ...b, _displayId: `${prefix}${seq}` };
+      });
+
+      setBookings(withDisplay);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching bookings:', error);
@@ -261,17 +286,24 @@ const MyBookings = () => {
                   return (
                     <tr key={booking._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-semibold text-gray-900 dark:text-white">{booking._id}</div>
+                        <div className="font-semibold text-gray-900 dark:text-white">{booking._displayId || booking._id}</div>
                         <div className="text-xs text-gray-500">
                           {new Date(booking.createdAt).toLocaleDateString()}
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="font-semibold text-gray-900 dark:text-white">
-                          {booking.customerId?.name}
+                          {(
+                            booking.customerId?.fullName ||
+                            booking.customerId?.name ||
+                            booking.customerName ||
+                            booking.customer?.fullName ||
+                            booking.customer ||
+                            (typeof booking.customerId === 'string' ? booking.customerId : null)
+                          ) || 'Customer'}
                         </div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {booking.customerId?.phone}
+                          {booking.customerId?.phone || booking.customer?.phone || ''}
                         </div>
                       </td>
                       <td className="px-6 py-4">
