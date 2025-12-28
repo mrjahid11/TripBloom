@@ -8,6 +8,7 @@ import ItinerariesManager from '../operator/ItinerariesManager';
 import MessagesAnnouncements from '../operator/MessagesAnnouncements';
 import OperatorProfile from '../operator/OperatorProfile';
 import NotificationCenter from './NotificationCenter';
+import AnnouncementBanner from './AnnouncementBanner';
 
 const OperatorDashboard = () => {
   const navigate = useNavigate();
@@ -107,6 +108,11 @@ const OperatorDashboard = () => {
 
       {/* Main Content */}
       <div className="ml-64 p-8">
+        {/* Announcements Banner */}
+        <div className="mb-6">
+          <AnnouncementBanner userRole="OPERATORS" />
+        </div>
+
         {/* Header: large welcome only on dashboard; compact title+controls on other views */}
         {activeView === 'dashboard' ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-8 border border-gray-200 dark:border-gray-700">

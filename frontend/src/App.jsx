@@ -29,6 +29,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import CustomerHistory from './components/CustomerHistory';
 import CustomerProfile from './components/CustomerProfile';
 import DateChangeRequestsManager from './components/DateChangeRequestsManager';
+import ActivityLogsViewer from './components/ActivityLogsViewer';
+import AnnouncementsManager from './components/AnnouncementsManager';
 
 const router = createBrowserRouter(
   createRoutesFromElements(
@@ -62,6 +64,8 @@ const router = createBrowserRouter(
         <Route path="date-changes" element={<DateChangeRequestsManager />} />
         <Route path="reviews" element={<ReviewsManager />} />
         <Route path="settings" element={<SettingsManager />} />
+        <Route path="activity-logs" element={<ActivityLogsViewer />} />
+        <Route path="announcements" element={<AnnouncementsManager />} />
       </Route>
       <Route path="/customer" element={
         <ProtectedRoute role="customer">

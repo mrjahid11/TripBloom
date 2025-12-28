@@ -24,6 +24,23 @@ User.collection.dropIndex('username_1').catch(() => {});
 
 import { signupController, loginController, requireRole, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController, getSavedPackagesController, savePackageController, unsavePackageController, getUserController, updateProfileController, changePasswordController, awardSignupBonusController } from './controller/user.controller.js';
 import { getOperatorDashboardController, getOperatorProfileController, updateOperatorProfileController } from './controller/operator.controller.js';
+import {
+  getAdminDashboardController,
+  getActivityLogsController,
+  updateUserRoleController,
+  toggleUserSuspensionController,
+  getOperatorsWithStatsController,
+  moderateTourPackageController,
+  deleteReviewController as adminDeleteReviewController,
+  getPlatformMetricsController,
+  getSystemSettingController,
+  getAllSystemSettingsController,
+  updateSystemSettingController,
+  createAnnouncementController,
+  getActiveAnnouncementsController,
+  updateAnnouncementController,
+  deleteAnnouncementController
+} from './controller/admin.controller.js';
 
 
 
@@ -69,6 +86,34 @@ app.post('/api/admin/users', createUserController); // Create user
 app.put('/api/admin/users/:userId', updateUserController); // Update user info
 app.delete('/api/admin/users/:userId', deactivateUserController); // Deactivate user
 app.post('/api/admin/award-signup-bonus', awardSignupBonusController); // Award signup bonus to existing users
+
+// Admin Dashboard & Analytics
+app.get('/api/admin/dashboard', getAdminDashboardController); // Get admin dashboard overview
+app.get('/api/admin/activity-logs', getActivityLogsController); // Get activity logs
+app.get('/api/admin/metrics', getPlatformMetricsController); // Get platform metrics
+
+// Admin User Management (Enhanced)
+app.put('/api/admin/users/:userId/role', updateUserRoleController); // Update user role
+app.post('/api/admin/users/:userId/suspend', toggleUserSuspensionController); // Suspend/activate user
+app.get('/api/admin/operators/stats', getOperatorsWithStatsController); // Get operators with stats
+
+// Admin Content Moderation
+app.post('/api/admin/packages/:packageId/moderate', moderateTourPackageController); // Approve/reject package
+app.delete('/api/admin/reviews/:reviewId', adminDeleteReviewController); // Delete review (Admin moderation)
+
+// Admin System Settings
+app.get('/api/admin/settings', getAllSystemSettingsController); // Get all system settings
+app.get('/api/admin/settings/:key', getSystemSettingController); // Get system setting by key
+app.put('/api/admin/settings/:key', updateSystemSettingController); // Update system setting
+
+// Admin Announcements
+app.post('/api/admin/announcements', createAnnouncementController); // Create announcement
+app.get('/api/admin/announcements', getActiveAnnouncementsController); // Get announcements
+app.put('/api/admin/announcements/:announcementId', updateAnnouncementController); // Update announcement
+app.delete('/api/admin/announcements/:announcementId', deleteAnnouncementController); // Delete announcement
+
+// Public announcements endpoint (for customers/operators)
+app.get('/api/announcements', getActiveAnnouncementsController); // Get active announcements for users
 
 // User profile routes
 app.get('/api/users/:userId', getUserController); // Get user by ID

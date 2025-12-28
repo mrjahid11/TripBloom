@@ -4,7 +4,7 @@ import axios from 'axios';
 import ManageUsersMenu from './ManageUsersMenu';
 import { 
   FaUsers, FaRoute, FaChartLine, FaCog, FaSignOutAlt, FaBell, FaSearch, 
-  FaCalendar, FaDollarSign, FaStar, FaEnvelope, FaCalendarAlt
+  FaCalendar, FaDollarSign, FaStar, FaEnvelope, FaCalendarAlt, FaEye, FaBullhorn
 } from 'react-icons/fa';
 
 const AdminLayout = () => {
@@ -166,8 +166,8 @@ const AdminLayout = () => {
   return (
     <div className="min-h-screen bg-gray-900 dark:bg-gray-900 flex">
       {/* Left Sidebar Navigation */}
-      <aside className="w-64 bg-gray-800 dark:bg-gray-800 shadow-2xl border-r border-gray-700 dark:border-gray-700 fixed h-full overflow-y-auto">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+      <aside className="w-64 bg-gray-800 dark:bg-gray-800 shadow-2xl border-r border-gray-700 dark:border-gray-700 fixed h-full flex flex-col">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center space-x-3 mb-4">
             <img src="/tripbloom_logo.svg" alt="TripBloom" className="w-10 h-10" />
             <h1 className="text-xl font-bold text-primary">Admin Portal</h1>
@@ -175,7 +175,7 @@ const AdminLayout = () => {
         </div>
 
         {/* Navigation Menu */}
-        <nav className="p-4 space-y-2">
+        <nav className="p-4 space-y-2 flex-1 overflow-y-auto pb-20">
           <button 
             onClick={() => navigate('/')}
             className="w-full flex items-center space-x-3 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:shadow-lg transition-all"
@@ -272,7 +272,29 @@ const AdminLayout = () => {
             <span className="font-semibold">Reviews</span>
           </button>
           
-
+          <button 
+            onClick={() => navigate('/admin/activity-logs')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/activity-logs')
+                ? 'bg-teal-500 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            <FaEye className="text-xl" />
+            <span className="font-semibold">Activity Logs</span>
+          </button>
+          
+          <button 
+            onClick={() => navigate('/admin/announcements')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/announcements')
+                ? 'bg-pink-500 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            <FaBullhorn className="text-xl" />
+            <span className="font-semibold">Announcements</span>
+          </button>
 
           <button 
             onClick={() => navigate('/admin/settings')}
@@ -288,7 +310,7 @@ const AdminLayout = () => {
         </nav>
 
         {/* Bottom Actions */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700 dark:border-gray-700 bg-gray-800 dark:bg-gray-800">
+        <div className="p-4 border-t border-gray-700 dark:border-gray-700 bg-gray-800 dark:bg-gray-800 flex-shrink-0">
           <button 
             onClick={() => {
               localStorage.removeItem('userName');

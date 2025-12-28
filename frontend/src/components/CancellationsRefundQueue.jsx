@@ -41,6 +41,21 @@ const CancellationsRefundQueue = () => {
         return totalPaid > 0;
       });
 
+      // Build package -> bookings map (all bookings) to compute sequence numbers (for display IDs)
+      const byPackage = {};
+      allBookings.forEach(b => {
+        const pkgId = b.packageId?._id || b.packageId;
+        if (!pkgId) return;
+        const key = pkgId.toString();
+        byPackage[key] = byPackage[key] || [];
+        byPackage[key].push(b);
+      });
+
+      // Sort each package list by createdAt ascending so sequence is deterministic
+      Object.keys(byPackage).forEach(k => {
+        byPackage[k].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      });
+
       // Fetch additional data for each cancelled booking
       const refundsWithData = await Promise.all(
         cancelledBookings.map(async (booking) => {
@@ -85,8 +100,31 @@ const CancellationsRefundQueue = () => {
               }
             }
 
+            // compute display id per package (like operator dashboard)
+            const pkg = booking.packageId || {};
+            const pkgId = pkg._id || pkg;
+            const list = pkgId ? byPackage[pkgId.toString()] || [] : [];
+            const index = list.findIndex(x => (x._id || x).toString() === (booking._id || booking).toString());
+            const seq = index >= 0 ? index + 1 : 1;
+
+            const pkgCode = pkg.packageCode || pkg.code || pkg.shortCode || pkg.packageIdCode;
+            let prefix;
+            if (pkgCode) {
+              prefix = pkgCode.toString().toUpperCase();
+            } else if (pkg.title) {
+              const words = pkg.title.split(/\s+/).filter(Boolean);
+              const a = (words[0] || '').charAt(0) || 'X';
+              const b = (words[1] || words[0] || '').charAt(0) || 'X';
+              prefix = (a + b).toUpperCase() + '000';
+            } else {
+              prefix = 'TB000';
+            }
+
+            const displayId = `${prefix}${seq}`;
+
             return {
               ...booking,
+              _displayId: displayId,
               totalPaid,
               totalAmount: booking.totalAmount || booking.finalAmount || totalPaid,
               refundAmount,
@@ -366,7 +404,7 @@ const CancellationsRefundQueue = () => {
                   >
                     <td className="py-4 px-4">
                       <div className="font-mono text-sm font-semibold text-gray-900 dark:text-white">
-                        #{refund._id}
+                        #{refund._displayId || refund._id}
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         {formatDate(refund.requestedDate)}
@@ -523,7 +561,7 @@ const CancellationsRefundQueue = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Booking ID</div>
-                  <div className="font-mono font-semibold text-gray-900 dark:text-white">#{selectedRefund._id}</div>
+                  <div className="font-mono font-semibold text-gray-900 dark:text-white">#{selectedRefund._displayId || selectedRefund._id}</div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Customer</div>

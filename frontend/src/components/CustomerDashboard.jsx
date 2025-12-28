@@ -8,6 +8,7 @@ import MapModal from './MapModal';
 import BookingDetailModal from './BookingDetailModal';
 import OperatorChatModal from './OperatorChatModal';
 import NotificationCenter from './NotificationCenter';
+import AnnouncementBanner from './AnnouncementBanner';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
@@ -299,6 +300,11 @@ const CustomerDashboard = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        {/* Announcements Banner */}
+        <div className="mb-6">
+          <AnnouncementBanner userRole="CUSTOMERS" />
+        </div>
 
         {/* Navigation Tabs */}
         <div className="flex space-x-4 mb-8 overflow-x-auto pb-2">
