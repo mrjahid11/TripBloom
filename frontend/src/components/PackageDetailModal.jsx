@@ -13,6 +13,16 @@ const PackageDetailModal = ({ isOpen, onClose, packageData, onEdit, initialTab }
   const [departures, setDepartures] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = 'unset';
+      };
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen && packageData) {
       if (activeTab === 'bookings') {
@@ -144,6 +154,11 @@ const PackageDetailModal = ({ isOpen, onClose, packageData, onEdit, initialTab }
                   {packageData.category && (
                     <span className="px-3 py-1 bg-white/20 rounded-full">
                       {packageData.category}
+                    </span>
+                  )}
+                  {packageData.isInternational && (
+                    <span className="px-3 py-1 bg-white/20 rounded-full flex items-center">
+                      ✈️ International
                     </span>
                   )}
                   <span className="flex items-center">

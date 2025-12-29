@@ -25,8 +25,10 @@ const PopularDestinations = () => {
             name: pkg.title,
             duration: `${pkg.defaultDays} Days`,
             price: pkg.basePrice,
-            // Use first destination or fallback
-            image: getDestinationImage(pkg.destinations?.[0]?.country || pkg.destinations?.[0]?.city),
+            // Use package photos first, then fallback to destination-based images
+            image: pkg.photos && pkg.photos.length > 0 
+              ? pkg.photos[0] 
+              : getDestinationImage(pkg.destinations?.[0]?.country || pkg.destinations?.[0]?.city || pkg.title),
             type: determinePackageType(pkg),
             description: pkg.description,
             destinations: pkg.destinations

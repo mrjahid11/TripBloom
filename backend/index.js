@@ -22,8 +22,14 @@ import { ROLES, User } from './model/user.model.js';
 // Remove username index if it exists (for migration from old schema)
 User.collection.dropIndex('username_1').catch(() => {});
 
-import { signupController, loginController, requireRole, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController, getSavedPackagesController, savePackageController, unsavePackageController, getUserController, updateProfileController, changePasswordController, awardSignupBonusController } from './controller/user.controller.js';
+import { signupController, loginController, requireRole, requireAuth, getAllUsersController, listUsersController, createUserController, updateUserController, deactivateUserController, getSavedPackagesController, savePackageController, unsavePackageController, getUserController, updateProfileController, changePasswordController, awardSignupBonusController } from './controller/user.controller.js';
 import { getOperatorDashboardController, getOperatorProfileController, updateOperatorProfileController } from './controller/operator.controller.js';
+import {
+  submitKYCController,
+  getMyKYCController,
+  verifyKYCController,
+  getAllKYCController
+} from './controller/kyc.controller.js';
 import {
   getAdminDashboardController,
   getActivityLogsController,
@@ -41,6 +47,50 @@ import {
   updateAnnouncementController,
   deleteAnnouncementController
 } from './controller/admin.controller.js';
+
+// Multer configuration for file uploads
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Ensure upload directory exists
+const uploadDir = path.join(__dirname, 'uploads', 'kyc');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Configure multer for KYC document uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'kyc-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = /jpeg|jpg|png|pdf/;
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedTypes.test(file.mimetype);
+  
+  if (extname && mimetype) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only images (JPEG, PNG) and PDF files are allowed'));
+  }
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
 
 
 
@@ -324,6 +374,12 @@ app.get('/api/reviews/package/:packageId', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch package reviews' });
   }
 });
+
+// KYC endpoints
+app.post('/api/kyc/submit', requireAuth, upload.single('documentImage'), submitKYCController); // Submit KYC (requires auth)
+app.get('/api/kyc/my-kyc', requireAuth, getMyKYCController); // Get user's own KYC
+app.get('/api/admin/kyc', requireRole(ROLES.ADMIN), getAllKYCController); // Get all KYC submissions (admin only)
+app.put('/api/admin/kyc/:id/verify', requireRole(ROLES.ADMIN), verifyKYCController); // Verify KYC (admin only)
 
 // Statistics endpoint for landing page
 app.get('/api/stats', async (req, res) => {

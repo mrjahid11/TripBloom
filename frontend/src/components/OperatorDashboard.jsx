@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaBus, FaClipboardList, FaChartBar, FaCalendarCheck, FaSignOutAlt, FaBook, FaComments, FaUser, FaHome } from 'react-icons/fa';
+import { FaBus, FaClipboardList, FaChartBar, FaCalendarCheck, FaSignOutAlt, FaBook, FaComments, FaUser, FaHome, FaIdCard } from 'react-icons/fa';
 import OperatorHome from '../operator/OperatorHome';
 import MyDepartures from '../operator/MyDepartures';
 import MyBookings from '../operator/MyBookings';

@@ -5,7 +5,8 @@ import {
   FaTimes, FaMapMarkerAlt, FaStar, FaCalendarAlt, 
   FaUsers, FaBed, FaUtensils, FaCar, FaUserTie, FaClock, 
   FaCheck, FaPlane, FaShieldAlt, FaCamera, FaHeart,
-  FaChevronLeft, FaChevronRight, FaEdit, FaCompressAlt
+  FaChevronLeft, FaChevronRight, FaEdit, FaCompressAlt,
+  FaExclamationTriangle, FaIdCard
 } from 'react-icons/fa';
 
 const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }) => {
@@ -18,6 +19,8 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
   const [selectedDepartureId, setSelectedDepartureId] = useState('');
   const [isFirstTravelerSelf, setIsFirstTravelerSelf] = useState(false);
   const [userProfileData, setUserProfileData] = useState(null);
+  const [kycStatus, setKycStatus] = useState(null);
+  const [kycLoading, setKycLoading] = useState(false);
   const [bookingData, setBookingData] = useState({
     numTravelers: 1,
     startDate: '',
@@ -70,6 +73,11 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
       };
       fetchRewardPoints();
       
+      // Fetch KYC status for international packages
+      if (packageData.isInternational && userRole === 'CUSTOMER') {
+        fetchKYCStatus();
+      }
+      
       // Fetch available departures for GROUP packages
       if (packageData.type === 'GROUP') {
         fetchAvailableDepartures();
@@ -113,6 +121,32 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
     } catch (err) {
       console.error('Failed to fetch available departures:', err);
       setAvailableDepartures([]);
+    }
+  };
+
+  const fetchKYCStatus = async () => {
+    setKycLoading(true);
+    try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setKycStatus('NOT_SUBMITTED');
+        setKycLoading(false);
+        return;
+      }
+
+      const res = await axios.get('/api/kyc/my-kyc', {
+        headers: { 'x-user-id': userId }
+      });
+      if (res.data.success && res.data.kyc) {
+        setKycStatus(res.data.kyc.status ? res.data.kyc.status.toString().toUpperCase() : null);
+      } else {
+        setKycStatus('NOT_SUBMITTED');
+      }
+    } catch (err) {
+      console.error('Failed to fetch KYC status:', err);
+      setKycStatus('NOT_SUBMITTED');
+    } finally {
+      setKycLoading(false);
     }
   };
 
@@ -167,6 +201,12 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
   };
 
   const handleBooking = async () => {
+    // Check KYC for international packages
+    if (packageData.isInternational && !(kycStatus === 'VERIFIED' || kycStatus === 'APPROVED')) {
+      alert('KYC verification is required to book international tour packages. Please complete your KYC verification in your profile settings.');
+      return;
+    }
+    
     // Validation
     if (packageData.type === 'GROUP' && !selectedDepartureId) {
       alert('Please select a departure date for this group tour.');
@@ -448,6 +488,11 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                     <span className="px-4 py-1.5 bg-white/20 backdrop-blur-sm rounded-full">
                       {isGroupTour ? '🚌 Group Tour' : '✨ Personal Tour'}
                     </span>
+                    {packageData.isInternational && (
+                      <span className="px-4 py-1.5 bg-orange-500/30 backdrop-blur-sm rounded-full">
+                        ✈️ International
+                      </span>
+                    )}
                     {packageData.category && (
                       <span className="px-4 py-1.5 bg-yellow-500/80 backdrop-blur-sm rounded-full font-semibold">
                         {packageData.category}
@@ -659,16 +704,67 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                     </div>
                   </div>
 
+                  {/* KYC Warning for International Packages */}
+                  {packageData.isInternational && userRole === 'CUSTOMER' && (
+                    <div className={`mb-4 p-4 rounded-lg border ${
+                      (kycStatus === 'VERIFIED' || kycStatus === 'APPROVED') 
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                        : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                    }`}>
+                      {kycLoading ? (
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Checking KYC status...</p>
+                      ) : (kycStatus === 'VERIFIED' || kycStatus === 'APPROVED') ? (
+                        <div className="flex items-start gap-2 text-green-700 dark:text-green-300">
+                          <FaIdCard className="mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold">✅ KYC Verified</p>
+                            <p className="text-xs mt-1">You're all set to book this international tour package!</p>
+                          </div>
+                        </div>
+                      ) : kycStatus === 'PENDING' ? (
+                        <div className="flex items-start gap-2 text-yellow-700 dark:text-yellow-300">
+                          <FaExclamationTriangle className="mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold">⏳ KYC Pending Verification</p>
+                            <p className="text-xs mt-1">Your KYC is under review. You can book once it's verified.</p>
+                          </div>
+                        </div>
+                      ) : kycStatus === 'REJECTED' ? (
+                        <div className="flex items-start gap-2 text-red-700 dark:text-red-300">
+                          <FaExclamationTriangle className="mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold">❌ KYC Rejected</p>
+                            <p className="text-xs mt-1">Please resubmit your KYC in profile settings to book international tours.</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2 text-yellow-700 dark:text-yellow-300">
+                          <FaExclamationTriangle className="mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold">⚠️ KYC Required</p>
+                            <p className="text-xs mt-1">This is an international tour. Complete KYC verification in your profile to book.</p>
+                            <a href="/customer/profile" className="text-xs underline mt-1 block">Go to Profile Settings →</a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {!showBookingForm ? (
                     <div className="space-y-3">
                       {isGroupTour ? (
                         <>
-                          <button 
+                          <button
                             onClick={() => {
                               setIsCustomBooking(false);
                               setShowBookingForm(true);
                             }}
-                            className="w-full py-4 bg-gradient-to-r from-primary to-green-600 text-white font-bold rounded-xl hover:from-green-600 hover:to-primary transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
+                            disabled={packageData.isInternational && !(kycStatus === 'VERIFIED' || kycStatus === 'APPROVED')}
+                            className={`w-full py-4 bg-gradient-to-r from-primary to-green-600 text-white font-bold rounded-xl transition-all shadow-lg ${
+                              packageData.isInternational && !(kycStatus === 'VERIFIED' || kycStatus === 'APPROVED')
+                                ? 'opacity-50 cursor-not-allowed'
+                                : 'hover:from-green-600 hover:to-primary hover:shadow-xl transform hover:scale-105'
+                            }`}
                           >
                             Book This Tour
                           </button>
@@ -683,14 +779,24 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                               setIsCustomBooking(false);
                               setShowBookingForm(true);
                             }}
-                            className="w-full py-4 bg-gradient-to-r from-primary to-green-600 text-white font-bold rounded-xl hover:from-green-600 hover:to-primary transition-all shadow-lg hover:shadow-xl transform hover:scale-105"
+                            disabled={packageData.isInternational && !(kycStatus === 'VERIFIED' || kycStatus === 'APPROVED')}
+                            className={`w-full py-4 bg-gradient-to-r from-primary to-green-600 text-white font-bold rounded-xl transition-all shadow-lg ${
+                              packageData.isInternational && !(kycStatus === 'VERIFIED' || kycStatus === 'APPROVED')
+                                ? 'opacity-50 cursor-not-allowed'
+                                : 'hover:from-green-600 hover:to-primary hover:shadow-xl transform hover:scale-105'
+                            }`}
                           >
                             Book As-Is
                           </button>
                           {canCustomize && (
                             <button 
                               onClick={handleCustomize}
-                              className="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-bold rounded-xl hover:from-pink-600 hover:to-purple-500 transition-all shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2"
+                              disabled={packageData.isInternational && !(kycStatus === 'VERIFIED' || kycStatus === 'APPROVED')}
+                              className={`w-full py-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-bold rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+                                  packageData.isInternational && !(kycStatus === 'VERIFIED' || kycStatus === 'APPROVED')
+                                    ? 'opacity-50 cursor-not-allowed'
+                                    : 'hover:from-pink-600 hover:to-purple-500 hover:shadow-xl transform hover:scale-105'
+                              }`}
                             >
                               <FaEdit />
                               Customize Your Tour

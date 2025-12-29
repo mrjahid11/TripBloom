@@ -27,6 +27,12 @@ const tourPackageSchema = new mongoose.Schema({
     extras: [String],
     photos: [{ type: String }], // Array of photo URLs
   assignedOperators: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Operators assigned to this package
+  isInternational: { type: Boolean, default: false }, // Requires KYC for booking
+  mapLocation: {
+    lat: { type: Number },
+    lng: { type: Number },
+    zoom: { type: Number, default: 12 }
+  }, // Location coordinates for map display
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
 });

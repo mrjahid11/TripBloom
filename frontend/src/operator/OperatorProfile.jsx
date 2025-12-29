@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaUser, FaEnvelope, FaPhone, FaMapMarkerAlt, FaSave, FaToggleOn, FaToggleOff, FaStar, FaCalendarAlt } from 'react-icons/fa';
+import { FaUser, FaEnvelope, FaPhone, FaMapMarkerAlt, FaSave, FaToggleOn, FaToggleOff, FaStar, FaCalendarAlt, FaIdCard, FaCheckCircle, FaClock, FaTimesCircle } from 'react-icons/fa';
 
 const OperatorProfile = () => {
   const operatorId = localStorage.getItem('userId');
@@ -20,9 +20,18 @@ const OperatorProfile = () => {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // KYC state for operator (operators can submit their own KYC)
+  const [kycData, setKycData] = useState(null);
+  const [kycLoading, setKycLoading] = useState(false);
+  const [kycForm, setKycForm] = useState({ documentType: 'passport', documentNumber: '', documentPhoto: null });
 
   useEffect(() => {
     fetchProfile();
+  }, [operatorId]);
+
+  useEffect(() => {
+    // load operator's existing KYC (if any)
+    loadKYC();
   }, [operatorId]);
 
   const fetchProfile = async () => {
@@ -94,13 +103,99 @@ const OperatorProfile = () => {
     }
   };
 
+  // loadKYC removed — operator KYC management is handled by admins
+
   const handleChange = (field, value) => {
     setProfile({ ...profile, [field]: value });
   };
 
   const toggleAvailability = () => {
     const newStatus = profile.availability === 'AVAILABLE' ? 'UNAVAILABLE' : 'AVAILABLE';
+    const operatorId = localStorage.getItem('userId');
+
+    // If setting to UNAVAILABLE, ensure there are no future departures assigned
+    if (newStatus === 'UNAVAILABLE') {
+      (async () => {
+        try {
+          const res = await fetch(`/api/group-departure/operator/${operatorId}/future`);
+          if (res.ok) {
+            const data = await res.json();
+            const departures = data.departures || [];
+            if (departures.length > 0) {
+              alert('You have future/ongoing departures assigned. Please complete or reassign them before going unavailable.');
+              return;
+            }
+            // no future departures, proceed to set unavailable
+            setProfile(prev => ({ ...prev, availability: newStatus }));
+          } else {
+            // If API failed, be conservative and block change
+            alert('Failed to verify assigned departures. Try again later.');
+            return;
+          }
+        } catch (err) {
+          console.error('Error checking future departures', err);
+          alert('Network error checking assigned departures. Try again later.');
+          return;
+        }
+
+        // persist to server
+        (async () => {
+          try {
+            const res = await fetch(`/api/operator/${operatorId}/profile`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ availability: newStatus })
+            });
+            if (!res.ok) {
+              const txt = await res.text();
+              console.error('Failed to update availability:', res.status, txt);
+              alert('Failed to update availability. Reverting.');
+              // revert UI
+              setProfile(prev => ({ ...prev, availability: prev.availability === 'AVAILABLE' ? 'UNAVAILABLE' : 'AVAILABLE' }));
+            } else {
+              const data = await res.json();
+              if (data.profile && data.profile.availability) setProfile(prev => ({ ...prev, availability: data.profile.availability }));
+            }
+          } catch (err) {
+            console.error('Error updating availability', err);
+            alert('Network error updating availability.');
+            setProfile(prev => ({ ...prev, availability: prev.availability === 'AVAILABLE' ? 'UNAVAILABLE' : 'AVAILABLE' }));
+          }
+        })();
+      })();
+      return;
+    }
+
+    // For switching to AVAILABLE, proceed directly
     setProfile({ ...profile, availability: newStatus });
+    // persist to server
+    (async () => {
+      try {
+        const operatorId = localStorage.getItem('userId');
+        const res = await fetch(`/api/operator/${operatorId}/profile`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ availability: newStatus })
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          console.error('Failed to update availability:', res.status, txt);
+          alert('Failed to update availability. Reverting.');
+          // revert UI
+          setProfile(prev => ({ ...prev, availability: prev.availability === 'AVAILABLE' ? 'UNAVAILABLE' : 'AVAILABLE' }));
+        } else {
+          const data = await res.json();
+          // update saved profile from server
+          if (data.profile && data.profile.availability) {
+            setProfile(prev => ({ ...prev, availability: data.profile.availability }));
+          }
+        }
+      } catch (err) {
+        console.error('Error updating availability', err);
+        alert('Network error updating availability.');
+        setProfile(prev => ({ ...prev, availability: prev.availability === 'AVAILABLE' ? 'UNAVAILABLE' : 'AVAILABLE' }));
+      }
+    })();
   };
 
   const handleSave = async () => {
@@ -112,6 +207,74 @@ const OperatorProfile = () => {
     
     setSaving(false);
   };
+
+  const loadKYC = async () => {
+    const userId = operatorId;
+    if (!userId) return;
+    setKycLoading(true);
+    try {
+      const res = await fetch('/api/kyc/my-kyc', { headers: { 'x-user-id': userId } });
+      const data = await res.json();
+      if (data && data.success && data.kyc) setKycData(data.kyc);
+    } catch (err) {
+      console.error('Failed to load operator KYC:', err);
+    } finally {
+      setKycLoading(false);
+    }
+  };
+
+  const handleKYCSubmit = async (e) => {
+    e.preventDefault();
+    setKycLoading(true);
+    try {
+      const userId = operatorId;
+      if (!userId) {
+        alert('Operator not logged in');
+        setKycLoading(false);
+        return;
+      }
+      const formData = new FormData();
+      formData.append('documentType', kycForm.documentType);
+      formData.append('documentNumber', kycForm.documentNumber);
+      if (kycForm.documentPhoto) formData.append('documentImage', kycForm.documentPhoto);
+
+      const res = await fetch('/api/kyc/submit', { method: 'POST', headers: { 'x-user-id': userId }, body: formData });
+      const data = await res.json();
+      if (data.success) {
+        alert('KYC submitted successfully. Awaiting verification.');
+        setKycForm({ documentType: 'passport', documentNumber: '', documentPhoto: null });
+        loadKYC();
+      } else {
+        alert('Failed to submit KYC: ' + (data.message || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('KYC submit error', err);
+      alert('Network error submitting KYC');
+    } finally {
+      setKycLoading(false);
+    }
+  };
+
+  const getKYCStatusBadge = (status) => {
+    const s = (status || '').toString().toUpperCase();
+    switch (s) {
+      case 'VERIFIED':
+      case 'APPROVED':
+        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"><FaCheckCircle className="mr-1" /> Verified</span>;
+      case 'PENDING':
+        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"><FaClock className="mr-1" /> Pending</span>;
+      case 'REJECTED':
+        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"><FaTimesCircle className="mr-1" /> Rejected</span>;
+      default:
+        return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400">Not Submitted</span>;
+    }
+  };
+
+  const kycStatus = kycData && kycData.status ? kycData.status.toString().toUpperCase() : null;
+
+  // Operator KYC submission removed — handled by admin workflows.
+
+  // KYC badge and status logic removed for operators
 
   if (loading) {
     return (
@@ -319,11 +482,63 @@ const OperatorProfile = () => {
           </button>
         </div>
 
-        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-          <p className="text-sm text-blue-800 dark:text-blue-300">
-            ℹ️ <strong>Note:</strong> Availability status is not yet stored in database. When implemented, marking as unavailable will prevent new tour assignments.
-          </p>
+        
+      </div>
+
+      {/* KYC Section for Operator */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-200 dark:border-gray-700">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">KYC Verification</h2>
+        <div className="mb-4">
+          <p className="text-sm text-gray-600">Your KYC status:</p>
+          <div className="mt-2">{ getKYCStatusBadge(kycData?.status) }</div>
         </div>
+
+        {kycStatus === 'VERIFIED' || kycStatus === 'APPROVED' ? (
+          <div className="p-6 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-lg">
+            <h3 className="text-lg font-semibold text-green-800 dark:text-green-200 mb-2">KYC Verified</h3>
+            <p className="text-sm text-green-700 dark:text-green-200">Your identity has been verified by an administrator.</p>
+            {(kycData?.verifiedBy || kycData?.verifiedAt) && (
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                {kycData?.verifiedBy ? `Verified by: ${kycData.verifiedBy}` : null}
+                {kycData?.verifiedAt ? `${kycData?.verifiedBy ? ' • ' : ''}On: ${new Date(kycData.verifiedAt).toLocaleString()}` : null}
+              </p>
+            )}
+            <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">If you need to update your documents, please contact support.</div>
+          </div>
+        ) : (
+          <div>
+            {kycData && kycData.status && (kycData.status.toString().toLowerCase() === 'pending') && (
+              <div className="mb-4 text-sm text-gray-600">Submitted on: {new Date(kycData.createdAt).toLocaleString()}</div>
+            )}
+
+            <form onSubmit={handleKYCSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Document Type</label>
+                  <select value={kycForm.documentType} onChange={(e) => setKycForm({...kycForm, documentType: e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700">
+                    <option value="passport">Passport</option>
+                    <option value="national_id">National ID</option>
+                    <option value="drivers_license">Driver's License</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Document Number</label>
+                  <input value={kycForm.documentNumber} onChange={(e) => setKycForm({...kycForm, documentNumber: e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Document Image</label>
+                <input type="file" accept="image/*" onChange={(e) => setKycForm({...kycForm, documentPhoto: e.target.files && e.target.files[0]})} />
+              </div>
+              <div className="flex justify-end">
+                <button type="submit" disabled={kycLoading} className="px-6 py-3 bg-primary text-white rounded-lg">
+                  {kycLoading ? 'Submitting…' : (kycData && kycData.status ? 'Resubmit KYC' : 'Submit KYC')}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* Save Button */}

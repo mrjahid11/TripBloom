@@ -363,7 +363,7 @@ const BrowsePackages = () => {
               >
                 {/* Package Type Badge */}
                 <div className="relative">
-                  <div className="absolute top-4 right-4 z-10">
+                  <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 items-end">
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
                       pkg.type === 'GROUP' 
                         ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' 
@@ -371,6 +371,11 @@ const BrowsePackages = () => {
                     }`}>
                       {pkg.type === 'GROUP' ? <><FaUsers className="mr-1" /> Group</> : <><FaUser className="mr-1" /> Personal</>}
                     </span>
+                    {pkg.isInternational && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
+                        ✈️ International
+                      </span>
+                    )}
                   </div>
                   {pkg.category && (
                     <div className="absolute top-4 left-4 z-10">

@@ -1,5 +1,6 @@
 // groupDeparture.service.js
 import { GroupDeparture, DEPARTURE_STATUS_ENUM } from '../model/groupDeparture.model.js';
+import { User } from '../model/user.model.js';
 
 // Create group departure
 export async function createGroupDeparture({ packageId, startDate, endDate, totalSeats, pricePerPerson, operatorIds, assignedBy }) {
@@ -208,6 +209,11 @@ export async function assignOperatorsToDeparture({ departureId, operatorIds, ass
   }
   // Add new operators with tracking
   for (const opId of newOps) {
+    // Check availability
+    const op = await User.findById(opId).select('availability');
+    if (op && op.availability && op.availability.toString().toUpperCase() === 'UNAVAILABLE') {
+      return { error: `Operator ${opId} is currently UNAVAILABLE and cannot be assigned.` };
+    }
     departure.operators.push({ 
       operatorId: opId, 
       assignedBy: assignedBy || opId,
@@ -277,6 +283,11 @@ export async function addOperatorToDeparture({ departureId, operatorId, assigned
   // Check if operator already assigned
   if (departure.operators.some(op => op.operatorId.toString() === operatorId)) {
     return { error: 'Operator is already assigned to this departure.' };
+  }
+  // Check operator availability
+  const op = await User.findById(operatorId).select('availability');
+  if (op && op.availability && op.availability.toString().toUpperCase() === 'UNAVAILABLE') {
+    return { error: `Operator ${operatorId} is currently UNAVAILABLE and cannot be assigned.` };
   }
   
   departure.operators.push({ 

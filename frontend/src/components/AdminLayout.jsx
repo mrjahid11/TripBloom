@@ -4,7 +4,7 @@ import axios from 'axios';
 import ManageUsersMenu from './ManageUsersMenu';
 import { 
   FaUsers, FaRoute, FaChartLine, FaCog, FaSignOutAlt, FaBell, FaSearch, 
-  FaCalendar, FaDollarSign, FaStar, FaEnvelope, FaCalendarAlt, FaEye, FaBullhorn
+  FaCalendar, FaDollarSign, FaStar, FaEnvelope, FaCalendarAlt, FaEye, FaBullhorn, FaIdCard
 } from 'react-icons/fa';
 
 const AdminLayout = () => {
@@ -14,6 +14,7 @@ const AdminLayout = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadList, setUnreadList] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [pendingKYCCount, setPendingKYCCount] = useState(0);
   const notifRef = useRef(null);
 
   // Helper function to check if a path is active
@@ -42,9 +43,12 @@ const AdminLayout = () => {
       const roleUpper = (role || '').toUpperCase();
       
       // Fetch all notification sources in parallel
-      const [contactsRes, bookingsRes] = await Promise.all([
+      const [contactsRes, bookingsRes, kycRes] = await Promise.all([
         axios.get('/api/admin/contacts', { headers: { 'x-user-role': role } }).catch(() => ({ data: { contacts: [] } })),
-        axios.get('/api/bookings').catch(() => ({ data: { bookings: [] } }))
+        axios.get('/api/bookings').catch(() => ({ data: { bookings: [] } })),
+        axios.get('/api/admin/kyc', { 
+          headers: { 'x-user-role': role } 
+        }).catch(() => ({ data: { kycs: [] } }))
       ]);
       
       const notifications = [];
@@ -61,6 +65,24 @@ const AdminLayout = () => {
             message: c.message,
             time: new Date(c.createdAt),
             action: () => navigate(`/admin/contacts?focus=${c._id}`)
+          });
+        });
+      }
+      
+      // KYC requests
+      if (kycRes.data && Array.isArray(kycRes.data.kycs)) {
+        const allKYCs = kycRes.data.kycs;
+        const pendingKYCs = allKYCs.filter(k => k.status === 'pending');
+        setPendingKYCCount(pendingKYCs.length); // Set count for menu badge
+        pendingKYCs.forEach(k => {
+          notifications.push({
+            id: `kyc-${k._id}`,
+            type: 'kyc',
+            icon: '🆔',
+            title: 'KYC Pending Review',
+            message: `${k.user?.fullName || k.user?.name || 'Customer'} submitted KYC verification`,
+            time: new Date(k.createdAt),
+            action: () => navigate('/admin/kyc')
           });
         });
       }
@@ -258,6 +280,23 @@ const AdminLayout = () => {
           >
             <FaCalendarAlt className="text-xl" />
             <span className="font-semibold">Date Change Req</span>
+          </button>
+          
+          <button 
+            onClick={() => navigate('/admin/kyc')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/kyc')
+                ? 'bg-cyan-500 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            <FaIdCard className="text-xl" />
+            <span className="font-semibold">KYC Management</span>
+            {pendingKYCCount > 0 && (
+              <span className="ml-auto inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
+                {pendingKYCCount}
+              </span>
+            )}
           </button>
           
           <button 

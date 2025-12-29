@@ -31,6 +31,7 @@ import CustomerProfile from './components/CustomerProfile';
 import DateChangeRequestsManager from './components/DateChangeRequestsManager';
 import ActivityLogsViewer from './components/ActivityLogsViewer';
 import AnnouncementsManager from './components/AnnouncementsManager';
+import AdminKYCManager from './components/AdminKYCManager';
 
 const router = createBrowserRouter(
   createRoutesFromElements(
@@ -62,6 +63,7 @@ const router = createBrowserRouter(
         <Route path="users" element={<UsersManager />} />
         <Route path="refunds" element={<RefundsManager />} />
         <Route path="date-changes" element={<DateChangeRequestsManager />} />
+        <Route path="kyc" element={<AdminKYCManager />} />
         <Route path="reviews" element={<ReviewsManager />} />
         <Route path="settings" element={<SettingsManager />} />
         <Route path="activity-logs" element={<ActivityLogsViewer />} />

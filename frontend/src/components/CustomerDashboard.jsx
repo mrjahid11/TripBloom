@@ -101,7 +101,10 @@ const CustomerDashboard = () => {
               return nowDay >= startDay && nowDay <= endDay;
             } catch (err) { return false; }
           })(),
-          booking: b
+          booking: {
+            ...b,
+            checkedIn: b.checkedIn || (localStorage.getItem(`checkedIn_${b._id || b.id}`) === 'true')
+          }
         }));
 
         setUpcomingTrips(upcoming);
@@ -128,7 +131,7 @@ const CustomerDashboard = () => {
             return todayDay >= startDay && todayDay <= endDay && b.status !== 'CANCELLED';
           });
 
-          if (ongoing) {
+            if (ongoing) {
             const t = {
               id: ongoing._id || ongoing.id,
               destination: ongoing.packageId?.destination || ongoing.packageId?.title || ongoing.package?.destination || ongoing.package?.title || ongoing.packageTitle || 'Package',
@@ -137,7 +140,10 @@ const CustomerDashboard = () => {
               dateLabel: ongoing.startDate ? `${new Date(ongoing.startDate).toLocaleDateString()}${ongoing.endDate ? ' - ' + new Date(ongoing.endDate).toLocaleDateString() : ''}` : 'TBD',
               image: ongoing.packageId?.photos?.[0] || ongoing.package?.image || `https://source.unsplash.com/featured/?${encodeURIComponent((ongoing.packageId?.destination || ongoing.package?.destination || 'travel'))}`,
               status: ongoing.status || 'PENDING',
-              booking: ongoing
+              booking: {
+                ...ongoing,
+                checkedIn: ongoing.checkedIn || (localStorage.getItem(`checkedIn_${ongoing._id || ongoing.id}`) === 'true')
+              }
             };
             setTodayTrip(t);
           } else {
@@ -232,6 +238,24 @@ const CustomerDashboard = () => {
       });
       if (res.ok) {
         setCheckedInBookings(prev => ({ ...prev, [bookingId]: true }));
+        // persist fallback locally so a reload still shows checked-in if backend didn't save yet
+        try { localStorage.setItem(`checkedIn_${bookingId}`, 'true'); } catch (e) { /* ignore */ }
+        // fetch updated booking from server to reflect persisted state
+        try {
+          const refreshed = await fetch(`/api/bookings/${bookingId}`);
+          if (refreshed.ok) {
+            const rdata = await refreshed.json();
+            const bk = rdata.booking || rdata;
+            setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, ...bk }, isOngoing: t.isOngoing }) : t));
+            setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, ...bk } }) : prev);
+          } else {
+            // fallback optimistic update
+            setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, checkedIn: true }, isOngoing: t.isOngoing }) : t));
+            setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, checkedIn: true } }) : prev);
+          }
+        } catch (err) {
+          setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, checkedIn: true }, isOngoing: t.isOngoing }) : t));
+        }
         alert('You are checked in for today\'s tour.');
         return;
       }
@@ -243,6 +267,21 @@ const CustomerDashboard = () => {
       });
       if (res2.ok) {
         setCheckedInBookings(prev => ({ ...prev, [bookingId]: true }));
+        try { localStorage.setItem(`checkedIn_${bookingId}`, 'true'); } catch (e) { /* ignore */ }
+        try {
+          const refreshed = await fetch(`/api/bookings/${bookingId}`);
+          if (refreshed.ok) {
+            const rdata = await refreshed.json();
+            const bk = rdata.booking || rdata;
+            setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, ...bk }, isOngoing: t.isOngoing }) : t));
+            setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, ...bk } }) : prev);
+          } else {
+            setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, checkedIn: true }, isOngoing: t.isOngoing }) : t));
+            setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, checkedIn: true } }) : prev);
+          }
+        } catch (err) {
+          setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, checkedIn: true }, isOngoing: t.isOngoing }) : t));
+        }
         alert('You are checked in for today\'s tour.');
         return;
       }
@@ -434,56 +473,63 @@ const CustomerDashboard = () => {
                           // attempt to open a map view focused on package coordinates
                           const pkg = trip.booking?.packageId || trip.booking?.package || trip;
                           console.log('[Map Button] Package data:', pkg);
-                          console.log('[Map Button] Destinations:', pkg.destinations);
                           
-                          // Fallback coordinates for common Bangladesh destinations
-                          const destinationCoords = {
-                            'sajek valley': { lat: 23.3817, lng: 92.2938, zoom: 13 },
-                            'bandarban': { lat: 22.1953, lng: 92.2184, zoom: 12 },
-                            'cox\'s bazar': { lat: 21.4272, lng: 92.0058, zoom: 12 },
-                            'coxs bazar': { lat: 21.4272, lng: 92.0058, zoom: 12 },
-                            'rangamati': { lat: 22.6533, lng: 92.1753, zoom: 12 },
-                            'sylhet': { lat: 24.8949, lng: 91.8687, zoom: 12 },
-                            'sundarbans': { lat: 21.9497, lng: 89.1833, zoom: 11 },
-                            'kuakata': { lat: 21.8167, lng: 90.1167, zoom: 13 },
-                            'srimangal': { lat: 24.3065, lng: 91.7296, zoom: 13 },
-                            'saint martin': { lat: 20.6274, lng: 92.3233, zoom: 14 },
-                            'dhaka': { lat: 23.8103, lng: 90.4125, zoom: 11 }
-                          };
-                          
-                          // Try to find coordinates from destinations array
+                          // First, try to use mapLocation from package if available
                           let coords = null;
-                          if (pkg.destinations && Array.isArray(pkg.destinations)) {
-                            // Look for main destination (skip first if it's departure city like Dhaka)
-                            const mainDest = pkg.destinations.find((d, idx) => idx > 0 && d.name) || pkg.destinations[0];
-                            if (mainDest && mainDest.name) {
-                              const destName = mainDest.name.toLowerCase();
-                              const cityName = mainDest.city?.toLowerCase();
-                              
-                              // Try exact match first
-                              coords = destinationCoords[destName] || destinationCoords[cityName];
-                              
-                              // Try partial match
-                              if (!coords) {
-                                for (const [key, value] of Object.entries(destinationCoords)) {
-                                  if (destName.includes(key) || key.includes(destName) || 
-                                      (cityName && (cityName.includes(key) || key.includes(cityName)))) {
-                                    coords = value;
-                                    break;
+                          if (pkg.mapLocation && pkg.mapLocation.lat && pkg.mapLocation.lng) {
+                            coords = {
+                              lat: pkg.mapLocation.lat,
+                              lng: pkg.mapLocation.lng,
+                              zoom: pkg.mapLocation.zoom || 12
+                            };
+                            console.log('[Map Button] Using package mapLocation:', coords);
+                          } else {
+                            // Fallback: try to find coordinates from destinations array
+                            console.log('[Map Button] No mapLocation, checking destinations:', pkg.destinations);
+                            
+                            const destinationCoords = {
+                              'sajek valley': { lat: 23.3817, lng: 92.2938, zoom: 13 },
+                              'bandarban': { lat: 22.1953, lng: 92.2184, zoom: 12 },
+                              'cox\'s bazar': { lat: 21.4272, lng: 92.0058, zoom: 12 },
+                              'coxs bazar': { lat: 21.4272, lng: 92.0058, zoom: 12 },
+                              'rangamati': { lat: 22.6533, lng: 92.1753, zoom: 12 },
+                              'sylhet': { lat: 24.8949, lng: 91.8687, zoom: 12 },
+                              'sundarbans': { lat: 21.9497, lng: 89.1833, zoom: 11 },
+                              'kuakata': { lat: 21.8167, lng: 90.1167, zoom: 13 },
+                              'srimangal': { lat: 24.3065, lng: 91.7296, zoom: 13 },
+                              'saint martin': { lat: 20.6274, lng: 92.3233, zoom: 14 },
+                              'dhaka': { lat: 23.8103, lng: 90.4125, zoom: 11 }
+                            };
+                            
+                            if (pkg.destinations && Array.isArray(pkg.destinations)) {
+                              const mainDest = pkg.destinations.find((d, idx) => idx > 0 && d.name) || pkg.destinations[0];
+                              if (mainDest && mainDest.name) {
+                                const destName = mainDest.name.toLowerCase();
+                                const cityName = mainDest.city?.toLowerCase();
+                                
+                                coords = destinationCoords[destName] || destinationCoords[cityName];
+                                
+                                if (!coords) {
+                                  for (const [key, value] of Object.entries(destinationCoords)) {
+                                    if (destName.includes(key) || key.includes(destName) || 
+                                        (cityName && (cityName.includes(key) || key.includes(cityName)))) {
+                                      coords = value;
+                                      break;
+                                    }
                                   }
                                 }
-                              }
-                              
-                              if (coords) {
-                                coords.label = mainDest.name;
+                                
+                                if (coords) {
+                                  coords.label = mainDest.name;
+                                }
                               }
                             }
                           }
                           
-                          console.log('[Map Button] Found coords:', coords);
+                          console.log('[Map Button] Final coords:', coords);
                           if (coords) {
                             setMapCoords(coords);
-                            setMapTitle(coords.label || pkg.title || trip.destination || 'Location');
+                            setMapTitle(pkg.title || trip.destination || 'Location');
                             setMapOpen(true);
                             return;
                           }

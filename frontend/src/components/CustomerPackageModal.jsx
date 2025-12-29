@@ -72,6 +72,11 @@ const CustomerPackageModal = ({ isOpen, onClose, packageData, initialTab = 'over
             <div className="text-sm text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-3">
               <span className="flex items-center"><FaClock className="mr-1" />{(pkg.defaultDays || packageData.defaultDays) ? `${pkg.defaultDays || packageData.defaultDays}D/${pkg.defaultNights || packageData.defaultNights}N` : 'TBD'}</span>
               <span className="flex items-center"><FaStar className="mr-1 text-yellow-400" />{pkg.avgRating || packageData.avgRating || '—'}</span>
+              {(pkg.isInternational || packageData.isInternational) && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
+                  ✈️ International
+                </span>
+              )}
             </div>
           </div>
           <button onClick={onClose} className="text-gray-600 hover:text-gray-900"><FaTimes /></button>

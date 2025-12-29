@@ -181,6 +181,16 @@ export function requireRole(role) {
   };
 }
 
+// Authentication middleware - extracts user ID from headers
+export function requireAuth(req, res, next) {
+  const userId = req.headers['x-user-id'] || req.headers['user-id'];
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Authentication required.' });
+  }
+  req.user = { id: userId };
+  next();
+}
+
 // Award signup bonus to existing users
 export async function awardSignupBonusController(req, res) {
   try {

@@ -107,10 +107,25 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
     extras: '',
     // Photos array
     photos: [],
-    isActive: true
+    isActive: true,
+    isInternational: false,
+    // Map location
+    mapLat: '',
+    mapLng: '',
+    mapZoom: 12
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = 'unset';
+      };
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (packageData) {
@@ -130,7 +145,11 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
         destinations: packageData.destinations || [],
         extras: Array.isArray(packageData.extras) ? packageData.extras.join('\n') : '',
         photos: packageData.photos || [],
-        isActive: packageData.isActive !== undefined ? packageData.isActive : true
+        isActive: packageData.isActive !== undefined ? packageData.isActive : true,
+        isInternational: packageData.isInternational || false,
+        mapLat: packageData.mapLocation?.lat || '',
+        mapLng: packageData.mapLocation?.lng || '',
+        mapZoom: packageData.mapLocation?.zoom || 12
       });
     } else {
       // Creating new package
@@ -149,7 +168,11 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
         destinations: [],
         extras: '',
         photos: [],
-        isActive: true
+        isActive: true,
+        isInternational: false,
+        mapLat: '',
+        mapLng: '',
+        mapZoom: 12
       });
     }
     setError('');
@@ -204,8 +227,18 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
         destinations: formData.destinations || [],
         extras: formData.extras.split('\n').filter(e => e.trim()),
         photos: formData.photos || [],
-        isActive: formData.isActive
+        isActive: formData.isActive,
+        isInternational: formData.isInternational
       };
+
+      // Add map location if coordinates are provided
+      if (formData.mapLat && formData.mapLng) {
+        payload.mapLocation = {
+          lat: parseFloat(formData.mapLat),
+          lng: parseFloat(formData.mapLng),
+          zoom: parseInt(formData.mapZoom) || 12
+        };
+      }
 
       // Only include category for PERSONAL type packages
       if (formData.type === 'PERSONAL') {
@@ -232,8 +265,8 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full my-8 flex flex-col" style={{ maxHeight: 'calc(100vh - 4rem)' }}>
         {/* Header - Fixed */}
         <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-6 rounded-t-2xl flex items-center justify-between flex-shrink-0">
           <h2 className="text-2xl font-bold flex items-center">
@@ -565,6 +598,90 @@ const PackageEditModal = ({ isOpen, onClose, package: packageData, onPackageUpda
                 </p>
               </div>
             </label>
+          </div>
+
+          {/* International Package */}
+          <div>
+            <label className="flex items-center p-4 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              <input
+                type="checkbox"
+                name="isInternational"
+                checked={formData.isInternational}
+                onChange={handleChange}
+                className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="ml-3">
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  International Package ✈️
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Check if this is an international tour (requires KYC for booking)
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {/* Map Location */}
+          <div className="border border-gray-300 dark:border-gray-600 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+              <FaMapMarkerAlt className="mr-2 text-red-500" />
+              Map Location (Optional)
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+              Add coordinates to show this package location on the map. Customers can view it by clicking the map button.
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Latitude
+                </label>
+                <input
+                  type="number"
+                  name="mapLat"
+                  value={formData.mapLat}
+                  onChange={handleChange}
+                  step="any"
+                  placeholder="e.g., 23.8103"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Longitude
+                </label>
+                <input
+                  type="number"
+                  name="mapLng"
+                  value={formData.mapLng}
+                  onChange={handleChange}
+                  step="any"
+                  placeholder="e.g., 90.4125"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Zoom Level
+                </label>
+                <input
+                  type="number"
+                  name="mapZoom"
+                  value={formData.mapZoom}
+                  onChange={handleChange}
+                  min="1"
+                  max="18"
+                  placeholder="12"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+              💡 Tip: You can find coordinates using <a href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google Maps</a>. Right-click on a location and copy the coordinates.
+            </p>
           </div>
 
           {/* Actions */}

@@ -3,6 +3,7 @@ import Booking from '../model/booking.model.js';
 import { TourPackage } from '../model/tourPackage.model.js';
 import { GroupDeparture } from '../model/groupDeparture.model.js';
 import { User } from '../model/user.model.js';
+import { isUserKYCApproved, getUserKYCStatus } from './kyc.service.js';
 
 // Check and cancel unpaid bookings that have passed start date
 export async function cancelUnpaidExpiredBookings() {
@@ -69,6 +70,21 @@ export async function createBooking({
     // Validate package is active
     if (!tourPackage.isActive) {
       return { error: 'This tour package is not currently available' };
+    }
+
+    // Check KYC requirements for international packages
+    if (tourPackage.isInternational) {
+      const kycApproved = await isUserKYCApproved(customerId);
+      if (!kycApproved) {
+        const kycStatus = await getUserKYCStatus(customerId);
+        if (!kycStatus) {
+          return { error: 'KYC verification required for international bookings. Please submit your KYC documents first.' };
+        } else if (kycStatus === 'pending') {
+          return { error: 'Your KYC verification is pending approval. Please wait for admin verification.' };
+        } else if (kycStatus === 'rejected') {
+          return { error: 'Your KYC verification was rejected. Please resubmit your documents.' };
+        }
+      }
     }
 
     // Get customer to check reward points
@@ -559,13 +575,32 @@ function calculateRefund(booking) {
 // Add payment to booking
 export async function addPayment({ bookingId, amount, method, transactionRef }) {
   try {
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findById(bookingId)
+      .populate('customerId')
+      .populate('packageId');
+      
     if (!booking) {
       return { error: 'Booking not found' };
     }
 
     if (booking.status === 'CANCELLED' || booking.status === 'REFUNDED') {
       return { error: 'Cannot add payment to cancelled or refunded booking' };
+    }
+
+    // Check KYC for large payments (above 50,000 BDT)
+    const LARGE_PAYMENT_THRESHOLD = 50000;
+    if (amount >= LARGE_PAYMENT_THRESHOLD) {
+      const kycApproved = await isUserKYCApproved(booking.customerId._id || booking.customerId);
+      if (!kycApproved) {
+        const kycStatus = await getUserKYCStatus(booking.customerId._id || booking.customerId);
+        if (!kycStatus) {
+          return { error: `Payments above ৳${LARGE_PAYMENT_THRESHOLD.toLocaleString()} require KYC verification. Please submit your KYC documents first.` };
+        } else if (kycStatus === 'pending') {
+          return { error: 'Your KYC verification is pending. Large payments will be enabled once approved.' };
+        } else if (kycStatus === 'rejected') {
+          return { error: 'Your KYC verification was rejected. Please resubmit your documents to make large payments.' };
+        }
+      }
     }
 
     const payment = {

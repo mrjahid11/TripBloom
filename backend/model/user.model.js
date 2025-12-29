@@ -13,6 +13,11 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   phone: { type: String },
   age: { type: Number, min: 1, max: 120 },
+  availability: {
+    type: String,
+    enum: ['AVAILABLE', 'UNAVAILABLE'],
+    default: 'AVAILABLE'
+  },
   passwordHash: { type: String, required: true },
   roles: {
     type: [String],

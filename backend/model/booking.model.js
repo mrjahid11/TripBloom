@@ -221,6 +221,18 @@ const bookingSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }
+  ,
+  checkedIn: {
+    type: Boolean,
+    default: false
+  },
+  checkedInAt: {
+    type: Date
+  },
+  checkedInByUser: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }
 }, {
   timestamps: true
 });
