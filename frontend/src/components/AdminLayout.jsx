@@ -17,6 +17,15 @@ const AdminLayout = () => {
   const [pendingKYCCount, setPendingKYCCount] = useState(0);
   const notifRef = useRef(null);
 
+  // Helper to dismiss a notification by id
+  const dismissNotification = (notifId) => {
+    setUnreadList(prev => {
+      const updated = prev.filter(n => n.id !== notifId);
+      setUnreadCount(updated.length);
+      return updated;
+    });
+  };
+
   // Helper function to check if a path is active
   const isActive = (path) => {
     if (path === '/admin') {
@@ -131,6 +140,86 @@ const AdminLayout = () => {
       
       setUnreadList(recentNotifications);
       setUnreadCount(notifications.length);
+      
+      // Fetch live chat messages for admin
+      try {
+        const adminId = localStorage.getItem('userId');
+        if (adminId && (roleUpper === 'ADMIN' || roleUpper === 'MODERATOR')) {
+          const usersRes = await axios.get('/api/users').catch(() => ({ data: [] }));
+          const usersList = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data.users || []);
+          
+          // Filter non-admin users
+          const nonAdmins = usersList.filter(u => {
+            if (!u) return false;
+            const r = u.role || '';
+            const rs = u.roles || [];
+            const isAdmin = r.toString().toUpperCase() === 'ADMIN' || 
+                           (Array.isArray(rs) && rs.some(x => (x||'').toString().toUpperCase() === 'ADMIN'));
+            return !isAdmin;
+          });
+          
+          // Get seen chat timestamps from localStorage
+          const seenChats = JSON.parse(localStorage.getItem('seenChatTimestamps') || '{}');
+          
+          const chatNotifs = [];
+          for (const user of nonAdmins.slice(0, 15)) {
+            try {
+              const qs = new URLSearchParams({ userA: adminId, userB: user._id });
+              const convRes = await axios.get('/api/messages/conversation?' + qs.toString()).catch(() => ({ data: { messages: [] } }));
+              
+              if (convRes.data.success && convRes.data.messages && convRes.data.messages.length > 0) {
+                const incomingMsgs = convRes.data.messages.filter(m => {
+                  const sid = m.senderId?._id || m.senderId;
+                  return sid !== adminId;
+                });
+                
+                if (incomingMsgs.length > 0) {
+                  const lastMsg = incomingMsgs[incomingMsgs.length - 1];
+                  const lastMsgTime = new Date(lastMsg.sentAt).getTime();
+                  const seenTime = seenChats[user._id] || 0;
+                  
+                  // Only show notification if message is newer than last seen
+                  if (lastMsgTime > seenTime) {
+                    const senderName = lastMsg.senderId?.fullName || lastMsg.senderId?.name || user.fullName || user.name || user.email || 'User';
+                    const notifId = `chat-${user._id}`;
+                    chatNotifs.push({
+                      id: notifId,
+                      type: 'live-chat',
+                      icon: '💬',
+                      title: `Chat from ${senderName}`,
+                      message: lastMsg.content?.substring(0, 50) + (lastMsg.content?.length > 50 ? '...' : ''),
+                      time: new Date(lastMsg.sentAt),
+                      action: () => {
+                        // Mark chat as seen when clicked
+                        const currentSeen = JSON.parse(localStorage.getItem('seenChatTimestamps') || '{}');
+                        currentSeen[user._id] = Date.now();
+                        localStorage.setItem('seenChatTimestamps', JSON.stringify(currentSeen));
+                        // Immediately dismiss from UI
+                        dismissNotification(notifId);
+                        navigate(`/admin/contacts?chatUserId=${user._id}`);
+                      }
+                    });
+                  }
+                }
+              }
+            } catch (err) {
+              // skip
+            }
+          }
+          
+          if (chatNotifs.length > 0) {
+            const merged = [...chatNotifs, ...recentNotifications]
+              .sort((a, b) => b.time - a.time)
+              .slice(0, 15);
+            const uniqueIds = new Set(merged.map(n => n.id));
+            setUnreadList(merged);
+            setUnreadCount(uniqueIds.size);
+          }
+        }
+      } catch (err) {
+        console.debug('Live chat notifications fetch failed', err);
+      }
+      
       // Additionally fetch pending reviews (admin/moderator)
       try {
         // allow different casing (admin, ADMIN, Admin)
@@ -151,9 +240,9 @@ const AdminLayout = () => {
           console.debug('AdminLayout: fetched pending reviews', reviewNotifs.length, { role: roleUpper });
 
           if (reviewNotifs.length > 0) {
-            const merged = [...reviewNotifs, ...recentNotifications]
+            const merged = [...reviewNotifs, ...unreadList]
               .sort((a, b) => b.time - a.time)
-              .slice(0, 10);
+              .slice(0, 15);
             // compute unique count by id to avoid double-counting
             const uniqueIds = new Set(merged.map(n => n.id));
             setUnreadList(merged);
@@ -291,7 +380,7 @@ const AdminLayout = () => {
             }`}
           >
             <FaIdCard className="text-xl" />
-            <span className="font-semibold">KYC Management</span>
+            <span className="font-semibold">KYC Verify</span>
             {pendingKYCCount > 0 && (
               <span className="ml-auto inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-600 rounded-full">
                 {pendingKYCCount}
@@ -312,6 +401,18 @@ const AdminLayout = () => {
           </button>
           
           <button 
+            onClick={() => navigate('/admin/announcements')}
+            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+              isActive('/admin/announcements')
+                ? 'bg-pink-500 text-white shadow-lg'
+                : 'text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            <FaBullhorn className="text-xl" />
+            <span className="font-semibold">Announcements</span>
+          </button>
+          
+          <button 
             onClick={() => navigate('/admin/activity-logs')}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
               isActive('/admin/activity-logs')
@@ -323,17 +424,6 @@ const AdminLayout = () => {
             <span className="font-semibold">Activity Logs</span>
           </button>
           
-          <button 
-            onClick={() => navigate('/admin/announcements')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
-              isActive('/admin/announcements')
-                ? 'bg-pink-500 text-white shadow-lg'
-                : 'text-gray-300 hover:bg-gray-700'
-            }`}
-          >
-            <FaBullhorn className="text-xl" />
-            <span className="font-semibold">Announcements</span>
-          </button>
 
           <button 
             onClick={() => navigate('/admin/settings')}
@@ -433,9 +523,17 @@ const AdminLayout = () => {
                                   ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400' 
                                   : n.type === 'review-pending'
                                   ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400'
+                                  : (n.type === 'chat' || n.type === 'live-chat')
+                                  ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+                                  : n.type === 'kyc'
+                                  ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400'
                                   : 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400'
                               }`}>
-                                {n.type === 'datechange' ? 'Date Change' : n.type === 'review-pending' ? 'Review' : 'Refund'}
+                                {n.type === 'datechange' ? 'Date Change' 
+                                  : n.type === 'review-pending' ? 'Review' 
+                                  : (n.type === 'chat' || n.type === 'live-chat') ? 'Chat'
+                                  : n.type === 'kyc' ? 'KYC'
+                                  : 'Refund'}
                               </span>
                             )}
                           </div>

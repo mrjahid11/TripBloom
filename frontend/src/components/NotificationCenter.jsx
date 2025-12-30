@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FaBell, FaTimes, FaComments, FaUser, FaCheckCircle, FaTimesCircle, FaClock, FaDollarSign, FaExclamationTriangle, FaIdCard } from 'react-icons/fa';
 
-const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
+const NotificationCenter = ({ userId, userRole, onOpenChat, onOpenAdminChat }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -10,6 +10,33 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
     const saved = localStorage.getItem(`viewedNotifications_${userId}`);
     return saved ? JSON.parse(saved) : [];
   });
+
+  // Recompute unread count based on viewed IDs and seen-chat timestamps
+  useEffect(() => {
+    try {
+      const seenAdmin = JSON.parse(localStorage.getItem('seenAdminChatTimestamps') || '{}');
+      const seenOperator = JSON.parse(localStorage.getItem('seenOperatorMsgTimestamps') || '{}');
+      let unread = 0;
+      for (const n of notifications) {
+        // For chat-related notifications rely on seen timestamps so stale viewed IDs don't suppress new messages
+        if (n.type === 'admin-chat') {
+          const last = new Date(n.timestamp).getTime();
+          const seen = seenAdmin[n.adminId] || 0;
+          if (last > seen) unread++;
+        } else if (n.type === 'message' && n.bookingId) {
+          const seen = seenOperator[n.bookingId] || 0;
+          const last = n.lastMsgTime || new Date(n.timestamp).getTime();
+          if (last > seen) unread++;
+        } else {
+          // Non-chat notifications use the viewedNotifications list
+          if (!viewedNotifications.includes(n.id)) unread++;
+        }
+      }
+      setUnreadCount(unread);
+    } catch (e) {
+      // fallback: keep existing unreadCount
+    }
+  }, [notifications, viewedNotifications]);
 
   useEffect(() => {
     if (userId) {
@@ -54,6 +81,8 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
         await fetchCustomerNotifications();
       } else if (userRole === 'TOUR_OPERATOR' || userRole === 'OPERATOR') {
         await fetchOperatorNotifications();
+      } else if (userRole === 'ADMIN' || (userRole || '').toUpperCase() === 'ADMIN') {
+        await fetchAdminChatNotifications();
       }
     } catch (error) {
       console.error('Error fetching notifications:', error);
@@ -385,43 +414,188 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
       }
     });
     
-    // Message notifications
+    // Message notifications (persist seen per booking)
+    const seenOperatorMsgTimestamps = JSON.parse(localStorage.getItem('seenOperatorMsgTimestamps') || '{}');
     for (const booking of bookings) {
       if (booking._id && booking.customerId) {
         const msgRes = await fetch(`/api/messages/booking/${booking._id}`);
         const msgData = await msgRes.json();
-        
         if (msgData.success && msgData.messages && msgData.messages.length > 0) {
           const unreadMessages = msgData.messages.filter(
             msg => (msg.senderId?._id || msg.senderId) !== userId
           );
-          
           if (unreadMessages.length > 0) {
             const lastMsg = msgData.messages[msgData.messages.length - 1];
-            notifs.push({
-              id: `message-${booking._id}`,
-              type: 'message',
-              title: `Message from ${booking.customerId?.fullName || booking.customerId?.name || 'Customer'}`,
-              message: lastMsg.content,
-              timestamp: new Date(lastMsg.sentAt),
-              booking: booking,
-              customer: booking.customerId,
-              unreadCount: unreadMessages.length,
-              icon: FaComments,
-              color: 'blue'
-            });
+            const lastMsgTime = new Date(lastMsg.sentAt).getTime();
+            const seenTime = seenOperatorMsgTimestamps[booking._id] || 0;
+            if (lastMsgTime > seenTime) {
+              notifs.push({
+                id: `message-${booking._id}`,
+                type: 'message',
+                title: `Message from ${booking.customerId?.fullName || booking.customerId?.name || 'Customer'}`,
+                message: lastMsg.content,
+                timestamp: new Date(lastMsg.sentAt),
+                booking: booking,
+                customer: booking.customerId,
+                unreadCount: unreadMessages.length,
+                icon: FaComments,
+                color: 'blue',
+                bookingId: booking._id,
+                lastMsgTime: lastMsgTime
+              });
+            }
           }
         }
       }
     }
     
+    // Fetch admin chat notifications for operators
+    try {
+      // Get all admin users
+      const usersRes = await fetch('/api/users');
+      const usersData = await usersRes.json();
+      const usersList = Array.isArray(usersData) ? usersData : (usersData.users || []);
+      
+      // Find admin users
+      const admins = usersList.filter(u => {
+        if (!u) return false;
+        const role = u.role || '';
+        const roles = u.roles || [];
+        return role.toString().toUpperCase() === 'ADMIN' || 
+               (Array.isArray(roles) && roles.some(r => (r||'').toString().toUpperCase() === 'ADMIN'));
+      });
+      
+      // Get seen timestamps from localStorage
+      const seenChats = JSON.parse(localStorage.getItem('seenAdminChatTimestamps') || '{}');
+      
+      // Check conversations with each admin
+      for (const admin of admins) {
+        try {
+          const qs = new URLSearchParams({ userA: userId, userB: admin._id });
+          const convRes = await fetch(`/api/messages/conversation?${qs.toString()}`);
+          const convData = await convRes.json();
+          
+          if (convData.success && convData.messages && convData.messages.length > 0) {
+            // Filter messages from admin only
+            const adminMsgs = convData.messages.filter(m => {
+              const senderId = m.senderId?._id || m.senderId;
+              return senderId === admin._id;
+            });
+            
+            if (adminMsgs.length > 0) {
+              const lastMsg = adminMsgs[adminMsgs.length - 1];
+              const lastMsgTime = new Date(lastMsg.sentAt).getTime();
+              const seenTime = seenChats[admin._id] || 0;
+              
+              // Only show if there's a newer message
+              if (lastMsgTime > seenTime) {
+                const adminName = admin.fullName || admin.name || 'Admin';
+                notifs.push({
+                  id: `admin-chat-${admin._id}`,
+                  type: 'admin-chat',
+                  title: `Message from ${adminName}`,
+                  message: lastMsg.content?.substring(0, 50) + (lastMsg.content?.length > 50 ? '...' : ''),
+                  timestamp: new Date(lastMsg.sentAt),
+                  icon: FaComments,
+                  color: 'purple',
+                  adminId: admin._id,
+                  adminName: adminName
+                });
+              }
+            }
+          }
+        } catch (err) {
+          // skip individual conversation errors
+        }
+      }
+    } catch (err) {
+      console.debug('Error fetching admin chat notifications for operator:', err);
+    }
+    
     // Sort by timestamp descending
     notifs.sort((a, b) => b.timestamp - a.timestamp);
+    console.debug('NotificationCenter: operator notifs built', notifs.map(n => n.id), { viewedNotifications });
     setNotifications(notifs);
     
     // Calculate unread count - notifications not in viewedNotifications list
     const unread = notifs.filter(n => !viewedNotifications.includes(n.id)).length;
+    console.debug('NotificationCenter: operator unread count', unread);
     setUnreadCount(unread);
+  };
+
+  // Fetch incoming live chat messages for admin
+  const fetchAdminChatNotifications = async () => {
+    try {
+      const notifs = [];
+      
+      // Fetch all users to find conversations
+      const usersRes = await fetch('/api/users');
+      const usersData = await usersRes.json();
+      const usersList = Array.isArray(usersData) ? usersData : (usersData.users || []);
+      
+      // Filter non-admin users
+      const nonAdmins = usersList.filter(u => {
+        if (!u) return false;
+        const role = u.role || '';
+        const roles = u.roles || [];
+        const isAdmin = role.toString().toUpperCase() === 'ADMIN' || 
+                       (Array.isArray(roles) && roles.some(r => (r||'').toString().toUpperCase() === 'ADMIN'));
+        return !isAdmin;
+      });
+      
+      // Check conversations with each user
+      for (const user of nonAdmins.slice(0, 20)) { // Limit to 20 users for performance
+        try {
+          const qs = new URLSearchParams({ userA: userId, userB: user._id });
+          const convRes = await fetch('/api/messages/conversation?' + qs.toString());
+          const convData = await convRes.json();
+          
+          if (convData.success && convData.messages && convData.messages.length > 0) {
+            // Find messages sent TO admin (from this user)
+            const incomingMessages = convData.messages.filter(m => {
+              const senderId = m.senderId?._id || m.senderId;
+              return senderId !== userId;
+            });
+            
+            if (incomingMessages.length > 0) {
+              const lastMsg = incomingMessages[incomingMessages.length - 1];
+              const senderName = lastMsg.senderId?.fullName || lastMsg.senderId?.name || user.fullName || user.name || user.email || 'User';
+              const userRole = Array.isArray(user.roles) ? user.roles[0] : user.role || 'User';
+              
+              notifs.push({
+                id: `chat-${user._id}`,
+                type: 'live-chat',
+                title: `Chat from ${senderName}`,
+                message: lastMsg.content,
+                timestamp: new Date(lastMsg.sentAt),
+                icon: FaComments,
+                color: 'blue',
+                chatUser: user,
+                unreadCount: incomingMessages.length,
+                userRole: userRole
+              });
+            }
+          }
+        } catch (err) {
+          // Skip this user on error
+        }
+      }
+      
+      // Sort by timestamp descending
+      notifs.sort((a, b) => b.timestamp - a.timestamp);
+      
+      setNotifications(prev => {
+        // Merge with existing notifications (like pending reviews)
+        const existingIds = new Set(prev.filter(p => p.type !== 'live-chat').map(p => p.id));
+        const merged = [...prev.filter(p => p.type !== 'live-chat'), ...notifs];
+        merged.sort((a, b) => b.timestamp - a.timestamp);
+        const unread = merged.filter(n => !viewedNotifications.includes(n.id)).length;
+        setUnreadCount(unread);
+        return merged;
+      });
+    } catch (err) {
+      console.error('Failed to fetch admin chat notifications', err);
+    }
   };
 
   // Fetch pending reviews for admins (or moderators)
@@ -461,6 +635,14 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
       const updated = [...viewedNotifications, notificationId];
       setViewedNotifications(updated);
       localStorage.setItem(`viewedNotifications_${userId}`, JSON.stringify(updated));
+      // Recompute unread count immediately
+      setUnreadCount(prev => {
+        try {
+          const currentNotifs = notifications || [];
+          const unread = currentNotifs.filter(n => !updated.includes(n.id)).length;
+          return unread;
+        } catch (e) { return prev; }
+      });
     }
   };
 
@@ -468,8 +650,34 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
     // Mark notification as viewed
     markAsViewed(notif.id);
     if (notif.type === 'message' && onOpenChat && notif.booking) {
+      // Mark last message as seen for this booking
+      if (notif.bookingId && notif.lastMsgTime) {
+        const seenOperatorMsgTimestamps = JSON.parse(localStorage.getItem('seenOperatorMsgTimestamps') || '{}');
+        seenOperatorMsgTimestamps[notif.bookingId] = notif.lastMsgTime;
+        localStorage.setItem('seenOperatorMsgTimestamps', JSON.stringify(seenOperatorMsgTimestamps));
+      }
       onOpenChat(notif.booking, notif.operator || notif.customer);
+      // Remove notification from UI immediately
+      setNotifications(prev => prev.filter(n => n.id !== notif.id));
       setIsOpen(false);
+    } else if (notif.type === 'live-chat' && notif.chatUser) {
+      // Navigate to admin contacts with selected user for live chat
+      window.location.href = `/admin/contacts?chatUserId=${notif.chatUser._id}`;
+      setIsOpen(false);
+    } else if (notif.type === 'admin-chat' && notif.adminId) {
+      // Mark admin chat as seen
+      const seenChats = JSON.parse(localStorage.getItem('seenAdminChatTimestamps') || '{}');
+      seenChats[notif.adminId] = Date.now();
+      localStorage.setItem('seenAdminChatTimestamps', JSON.stringify(seenChats));
+      // If parent provided a handler, use it to open admin chat in-app
+      if (typeof onOpenAdminChat === 'function') {
+        onOpenAdminChat(notif.adminId, notif.adminName);
+        setIsOpen(false);
+      } else {
+        // Fallback: navigate to operator messages route with query (may 404 if route missing)
+        window.location.href = `/operator/messages?type=admin`;
+        setIsOpen(false);
+      }
     } else {
       // Navigate for review notifications or close dropdown
       try {
@@ -499,7 +707,8 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
       green: 'bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-300',
       red: 'bg-red-100 dark:bg-red-900 text-red-600 dark:text-red-300',
       yellow: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-600 dark:text-yellow-300',
-      orange: 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300'
+      orange: 'bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-300',
+      purple: 'bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-300'
     };
     return styles[color] || styles.blue;
   };
@@ -521,14 +730,8 @@ const NotificationCenter = ({ userId, userRole, onOpenChat }) => {
     const newState = !isOpen;
     setIsOpen(newState);
     
-    // When opening dropdown, mark all current notifications as viewed
-    if (newState && notifications.length > 0) {
-      const allNotifIds = notifications.map(n => n.id);
-      const updated = [...new Set([...viewedNotifications, ...allNotifIds])];
-      setViewedNotifications(updated);
-      localStorage.setItem(`viewedNotifications_${userId}`, JSON.stringify(updated));
-      setUnreadCount(0);
-    }
+    // Do not auto-mark all notifications as viewed when opening the dropdown.
+    // Individual notifications are marked viewed when clicked.
   };
 
   return (

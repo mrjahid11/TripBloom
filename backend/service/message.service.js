@@ -45,3 +45,18 @@ export async function getBroadcastMessages({ tourId }) {
     .sort({ sentAt: 1 })
     .populate('senderId', 'fullName name email');
 }
+
+// Get conversation between two users (both directions)
+export async function getConversation({ userA, userB }) {
+  if (!userA || !userB) return [];
+  const query = {
+    $or: [
+      { senderId: userA, recipientId: userB },
+      { senderId: userB, recipientId: userA }
+    ]
+  };
+  return await Message.find(query)
+    .sort({ sentAt: 1 })
+    .populate('senderId', 'fullName name email')
+    .populate('recipientId', 'fullName name email');
+}

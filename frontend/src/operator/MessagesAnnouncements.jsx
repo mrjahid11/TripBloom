@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaComments, FaPaperPlane, FaUsers, FaBullhorn, FaUser, FaSearch } from 'react-icons/fa';
 
-const MessagesAnnouncements = ({ openBookingId }) => {
+const MessagesAnnouncements = ({ openBookingId, openAdminId, onAdminOpened }) => {
   const operatorId = localStorage.getItem('userId');
   const [activeTab, setActiveTab] = useState('conversations');
   const [conversations, setConversations] = useState([]);
@@ -34,7 +34,25 @@ const MessagesAnnouncements = ({ openBookingId }) => {
         loadConversation(conv);
       }
     }
+    // No dependency on parent callback, just react to prop
   }, [openBookingId, conversations]);
+
+  // Auto-open admin conversation if openAdminId is provided
+  useEffect(() => {
+    if (openAdminId && conversations.length > 0) {
+      const conv = conversations.find(c => c.type === 'admin' && (c.adminId === openAdminId || c.customerId === openAdminId));
+      if (conv) {
+        (async () => {
+          try {
+            await loadConversation(conv);
+            if (typeof onAdminOpened === 'function') onAdminOpened();
+          } catch (err) {
+            console.error('Error auto-opening admin conversation', err);
+          }
+        })();
+      }
+    }
+  }, [openAdminId, conversations]);
 
   useEffect(() => {
     // Auto-refresh messages for selected conversation every 3 seconds
@@ -133,14 +151,31 @@ const MessagesAnnouncements = ({ openBookingId }) => {
         const msgRes = await fetch(`/api/messages?tourId=${tour._id}`);
         const msgData = await msgRes.json();
         if (msgData.success && Array.isArray(msgData.messages)) {
+          // include latest broadcast for this tour (so operators see announcements)
+          const broadcasts = msgData.messages.filter(m => m.isBroadcast);
+          if (broadcasts.length > 0) {
+            const lastBroadcast = broadcasts[broadcasts.length - 1];
+            allConvs.push({
+              id: `broadcast-${tour._id}`,
+              tourId: tour._id,
+              tourName: tour.packageId?.title || 'Tour',
+              customerId: null,
+              customerName: 'All Travelers',
+              lastMessage: lastBroadcast.content,
+              timestamp: new Date(lastBroadcast.sentAt),
+              unread: 0,
+              type: 'broadcast'
+            });
+          }
+          // include 1:1 tour messages between operator and customers
           for (const msg of msgData.messages) {
             const senderId = msg.senderId?._id || msg.senderId;
             const recipientId = msg.recipientId?._id || msg.recipientId;
             // Only include messages where this operator is a participant (sender or recipient)
-            if (senderId !== operatorId && recipientId !== operatorId) continue;
+            if (String(senderId) !== String(operatorId) && String(recipientId) !== String(operatorId)) continue;
             // determine the customer participant (the non-operator)
-            const customerId = senderId === operatorId ? recipientId : senderId;
-            if (!customerId || customerId === operatorId) continue;
+            const customerId = String(senderId) === String(operatorId) ? recipientId : senderId;
+            if (!customerId || String(customerId) === String(operatorId)) continue;
             const customerName = (msg.recipientId?._id === customerId ? msg.recipientId?.fullName : msg.senderId?.fullName) || 'Unknown';
             allConvs.push({
               id: `tour-${tour._id}-${customerId}-${operatorId}`,
@@ -155,6 +190,44 @@ const MessagesAnnouncements = ({ openBookingId }) => {
             });
           }
         }
+      }
+
+      // Fetch admin->operator conversations (global admin messages)
+      try {
+        const usersRes = await fetch('/api/users');
+        const usersData = await usersRes.json();
+        const usersList = Array.isArray(usersData) ? usersData : (usersData.users || []);
+        const admins = usersList.filter(u => {
+          if (!u) return false;
+          if (u.role && typeof u.role === 'string' && u.role.toUpperCase() === 'ADMIN') return true;
+          if (Array.isArray(u.roles) && u.roles.map(r => (r||'').toString().toUpperCase()).includes('ADMIN')) return true;
+          if (typeof u.roles === 'string' && u.roles.toUpperCase() === 'ADMIN') return true;
+          return false;
+        });
+        for (const admin of admins) {
+          try {
+            const qs = new URLSearchParams({ userA: operatorId, userB: admin._id });
+            const convRes = await fetch('/api/messages/conversation?' + qs.toString());
+            const convData = await convRes.json();
+            if (convData.success && Array.isArray(convData.messages) && convData.messages.length > 0) {
+              const last = convData.messages[convData.messages.length - 1];
+              allConvs.push({
+                id: `admin-${admin._id}`,
+                adminId: admin._id,
+                customerId: admin._id,
+                customerName: admin.fullName || admin.name || admin.email || 'Admin',
+                lastMessage: last.content,
+                timestamp: new Date(last.sentAt),
+                unread: 0,
+                type: 'admin'
+              });
+            }
+          } catch (err) {
+            /* ignore per-admin fetch errors */
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load admin conversations', err);
       }
       
       // Remove duplicates (use conv.id which is unique per operator/tour/booking) and sort by timestamp
@@ -226,18 +299,46 @@ const MessagesAnnouncements = ({ openBookingId }) => {
       const res = await fetch(`/api/messages?tourId=${conv.tourId}`);
       const data = await res.json();
       const msgs = data.messages || [];
-      // Keep only messages between this operator and the conversation customer
-      const filtered = msgs.filter(msg => {
-        const sId = msg.senderId?._id || msg.senderId;
-        const rId = msg.recipientId?._id || msg.recipientId;
-        return (sId === operatorId && rId === conv.customerId) || (rId === operatorId && sId === conv.customerId);
-      });
-      fetchedMessages = filtered.map(msg => ({
-        id: msg._id,
-        sender: (msg.senderId?._id || msg.senderId) === operatorId ? 'operator' : 'customer',
-        text: msg.content,
-        timestamp: new Date(msg.sentAt)
-      }));
+      if (conv.type === 'broadcast') {
+        // show only broadcast messages for this tour
+        const broadcasts = msgs.filter(m => m.isBroadcast).map(msg => ({
+          id: msg._id,
+          sender: (msg.senderId?._id || msg.senderId) === operatorId ? 'operator' : 'admin',
+          text: msg.content,
+          timestamp: new Date(msg.sentAt)
+        }));
+        fetchedMessages = broadcasts;
+      } else {
+        // Keep only messages between this operator and the conversation customer
+        const filtered = msgs.filter(msg => {
+          const sId = msg.senderId?._id || msg.senderId;
+          const rId = msg.recipientId?._id || msg.recipientId;
+          return (String(sId) === String(operatorId) && String(rId) === String(conv.customerId)) || (String(rId) === String(operatorId) && String(sId) === String(conv.customerId));
+        });
+        fetchedMessages = filtered.map(msg => ({
+          id: msg._id,
+          sender: (msg.senderId?._id || msg.senderId) === operatorId ? 'operator' : 'customer',
+          text: msg.content,
+          timestamp: new Date(msg.sentAt)
+        }));
+      }
+    }
+    else if (conv.type === 'admin' && conv.adminId) {
+      try {
+        const qs = new URLSearchParams({ userA: operatorId, userB: conv.adminId });
+        const res = await fetch('/api/messages/conversation?' + qs.toString());
+        const data = await res.json();
+        const msgs = data.messages || [];
+        fetchedMessages = msgs.map(msg => ({
+          id: msg._id,
+          sender: (msg.senderId?._id || msg.senderId) === operatorId ? 'operator' : 'admin',
+          text: msg.content,
+          timestamp: new Date(msg.sentAt)
+        }));
+      } catch (err) {
+        console.error('Failed to load admin conversation', err);
+        fetchedMessages = [];
+      }
     }
     
     // Only update if messages have changed
@@ -255,6 +356,10 @@ const MessagesAnnouncements = ({ openBookingId }) => {
 
   const sendMessage = () => {
     if (!newMessage.trim() || !selectedConversation) return;
+    if (selectedConversation.type === 'broadcast') {
+      alert('Use the Broadcast tab to send announcements to all travelers.');
+      return;
+    }
     
     const payload = {
       senderId: operatorId,

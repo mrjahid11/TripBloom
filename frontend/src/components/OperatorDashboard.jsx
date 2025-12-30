@@ -23,6 +23,7 @@ const OperatorDashboard = () => {
     }
   });
   const [openBookingId, setOpenBookingId] = useState(null);
+  const [openAdminId, setOpenAdminId] = useState(null);
 
   const handleSetActiveView = (id) => {
     setActiveView(id);
@@ -49,7 +50,7 @@ const OperatorDashboard = () => {
       case 'itineraries':
         return <ItinerariesManager />;
       case 'messages':
-        return <MessagesAnnouncements openBookingId={openBookingId} />;
+        return <MessagesAnnouncements openBookingId={openBookingId} openAdminId={openAdminId} onAdminOpened={() => setOpenAdminId(null)} />;
       case 'profile':
         return <OperatorProfile />;
       default:
@@ -127,10 +128,18 @@ const OperatorDashboard = () => {
                   userId={localStorage.getItem('userId')}
                   userRole="TOUR_OPERATOR"
                   onOpenChat={(booking, customer) => {
-                  setOpenBookingId(booking._id);
-                  handleSetActiveView('messages');
+                    setOpenBookingId(booking._id);
+                    handleSetActiveView('messages');
+                    // Reset openBookingId after a short delay to allow MessagesAnnouncements to react
+                    setTimeout(() => setOpenBookingId(null), 100);
+                  }}
+                  onOpenAdminChat={(adminId, adminName) => {
+                    setOpenAdminId(adminId);
+                    handleSetActiveView('messages');
+                    // do not clear here; MessagesAnnouncements will call back when it opened the convo
                   }}
                 />
+                {/* AdminChat removed from header per request */}
                 <div className="text-right">
                   <p className="text-sm text-gray-600 dark:text-gray-400">Current Rating</p>
                   <p className="text-3xl font-bold text-orange-600">4.9 ⭐</p>
@@ -150,6 +159,11 @@ const OperatorDashboard = () => {
                 onOpenChat={(booking, customer) => {
                   setOpenBookingId(booking._id);
                   handleSetActiveView('messages');
+                }}
+                onOpenAdminChat={(adminId, adminName) => {
+                  setOpenAdminId(adminId);
+                  handleSetActiveView('messages');
+                  setTimeout(() => setOpenAdminId(null), 100);
                 }}
               />
               <div className="text-right">

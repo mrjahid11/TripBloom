@@ -1,4 +1,4 @@
-import { sendMessageController, getMessagesController, getBroadcastMessagesController, getBookingMessagesController } from './controller/message.controller.js';
+import { sendMessageController, getMessagesController, getBroadcastMessagesController, getBookingMessagesController, getConversationController } from './controller/message.controller.js';
 import { Review } from './model/review.model.js';
 import { TourPackage } from './model/tourPackage.model.js';
 
@@ -109,6 +109,7 @@ app.post('/api/messages/send', sendMessageController); // Send message (1-to-1 o
 app.get('/api/messages', getMessagesController); // Get messages for a tour or user
 app.get('/api/messages/booking/:bookingId', getBookingMessagesController); // Get messages for a specific booking
 app.get('/api/messages/broadcast', getBroadcastMessagesController); // Get broadcast messages for a tour
+app.get('/api/messages/conversation', getConversationController); // Get 1:1 conversation between two users
 // Operator dashboard endpoint
 app.get('/api/operator/:operatorId/dashboard', getOperatorDashboardController);
 app.get('/api/operator/:operatorId/profile', getOperatorProfileController);

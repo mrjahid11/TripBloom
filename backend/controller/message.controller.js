@@ -1,4 +1,4 @@
-import { sendMessage, getMessages, getBroadcastMessages, getBookingMessages } from '../service/message.service.js';
+import { sendMessage, getMessages, getBroadcastMessages, getBookingMessages, getConversation } from '../service/message.service.js';
 
 export async function sendMessageController(req, res) {
   const { tourId, senderId, receiverId, recipientId, content, messageText, isBroadcast, bookingId } = req.body;
@@ -35,5 +35,13 @@ export async function getBookingMessagesController(req, res) {
 export async function getBroadcastMessagesController(req, res) {
   const { tourId } = req.query;
   const messages = await getBroadcastMessages({ tourId });
+  res.json({ success: true, messages });
+}
+
+export async function getConversationController(req, res) {
+  // expects query params: userA, userB
+  const { userA, userB } = req.query;
+  if (!userA || !userB) return res.status(400).json({ success: false, message: 'userA and userB are required' });
+  const messages = await getConversation({ userA, userB });
   res.json({ success: true, messages });
 }

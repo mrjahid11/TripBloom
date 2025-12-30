@@ -9,6 +9,7 @@ import BookingDetailModal from './BookingDetailModal';
 import OperatorChatModal from './OperatorChatModal';
 import NotificationCenter from './NotificationCenter';
 import AnnouncementBanner from './AnnouncementBanner';
+import AdminChat from './AdminChat';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
@@ -30,6 +31,7 @@ const CustomerDashboard = () => {
   const [chatModalOpen, setChatModalOpen] = React.useState(false);
   const [chatBooking, setChatBooking] = React.useState(null);
   const [chatOperator, setChatOperator] = React.useState(null);
+  const [showSupportChat, setShowSupportChat] = React.useState(false);
   const [stats, setStats] = React.useState({
     totalTrips: 0,
     countriesVisited: 0,
@@ -343,6 +345,29 @@ const CustomerDashboard = () => {
         {/* Announcements Banner */}
         <div className="mb-6">
           <AnnouncementBanner userRole="CUSTOMERS" />
+        </div>
+
+        {/* Floating support chat button/panel (only AdminChat, no extra Support wrapper) */}
+        <div>
+          <div aria-hidden className="fixed bottom-6 right-6 z-40">
+            <button
+              onClick={() => setShowSupportChat(s => !s)}
+              className="w-14 h-14 rounded-full bg-primary text-white shadow-lg flex items-center justify-center hover:scale-105 transition-transform"
+              title="Support"
+            >
+              <FaComments size={20} />
+            </button>
+          </div>
+
+          {showSupportChat && (
+            <div className="fixed bottom-24 right-6 w-96 max-w-full z-50">
+              <div className="relative">
+                  <div className="p-0">
+                    <AdminChat currentUserId={(user && user.id) || localStorage.getItem('userId')} />
+                  </div>
+                </div>
+            </div>
+          )}
         </div>
 
         {/* Navigation Tabs */}
