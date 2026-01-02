@@ -231,6 +231,13 @@ const Bookings = () => {
                   const data = await res.json();
                   const updated = data.booking || data;
                   setBookings(prev => prev.map(x => (x._id === updated._id ? updated : x)));
+                  try {
+                    const detail = {
+                      ...updated,
+                      _id: (updated._id && typeof updated._id.toString === 'function') ? updated._id.toString() : (updated._id || updated.id)
+                    };
+                    window.dispatchEvent(new CustomEvent('bookingUpdated', { detail }));
+                  } catch (e) { /* ignore */ }
                   alert('Tour marked as completed. You can now write a review.');
                 } catch (err) {
                   console.error('End tour error', err);

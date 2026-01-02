@@ -42,6 +42,18 @@ const CustomerDashboard = () => {
     rewardPoints: 0
   });
 
+  const checkPaymentStatus = (booking) => {
+    const totalPaid = (booking.payments || []).filter(p => 
+      p.status === 'SUCCESS' || p.status === 'COMPLETED' || p.status === 'CONFIRMED'
+    ).reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalAmount = booking.totalAmount || booking.amount || 0;
+    const isPaid = totalPaid >= totalAmount;
+    const startDate = booking.startDate ? new Date(booking.startDate) : null;
+    const now = new Date();
+    const daysUntilStart = startDate ? Math.ceil((startDate - now) / (1000 * 60 * 60 * 24)) : null;
+    return { totalPaid, totalAmount, isPaid, daysUntilStart, startDate };
+  };
+
   React.useEffect(() => {
     const load = async () => {
       const userId = (user && user.id) || localStorage.getItem('userId');
@@ -74,7 +86,8 @@ const CustomerDashboard = () => {
         const now = new Date();
         const todayDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const upcoming = bookings.filter(b => {
-          if (b.status === 'CANCELLED') return false;
+          const st = (b.status || '').toString().toUpperCase();
+          if (st === 'CANCELLED' || st === 'COMPLETED') return false;
           const sd = b.startDate ? new Date(b.startDate) : null;
           const ed = b.endDate ? new Date(b.endDate) : sd;
           if (!sd && !ed) return true;
@@ -98,6 +111,8 @@ const CustomerDashboard = () => {
           // determine if trip is currently ongoing
           isOngoing: (function() {
             try {
+              // if booking already completed, do not treat as ongoing
+              if (b.status === 'COMPLETED') return false;
               if (!b.startDate) return false;
               const sd = new Date(b.startDate);
               const ed = b.endDate ? new Date(b.endDate) : sd;
@@ -127,28 +142,57 @@ const CustomerDashboard = () => {
           const today = new Date();
           const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-          // look through all bookings (not only upcoming) to find ongoing trips
-          const ongoing = bookings.find(b => {
+          // prefer bookings that are CONFIRMED and paid that start today
+          const confirmedPaidToday = bookings.find(b => {
+            const st = (b.status || '').toString().toUpperCase();
+            if (st !== 'CONFIRMED') return false;
+            try {
+              const paymentInfo = (function() {
+                // reuse local helper checkPaymentStatus if available
+                try { return checkPaymentStatus(b); } catch (e) { return { isPaid: false }; }
+              })();
+              if (!paymentInfo.isPaid) return false;
+            } catch (e) { return false; }
             if (!b.startDate) return false;
             const sd = new Date(b.startDate);
-            const ed = b.endDate ? new Date(b.endDate) : sd;
             const startDay = new Date(sd.getFullYear(), sd.getMonth(), sd.getDate());
-            const endDay = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate());
-            return todayDay >= startDay && todayDay <= endDay && b.status !== 'CANCELLED';
+            return startDay.getTime() === todayDay.getTime();
           });
 
-            if (ongoing) {
+          let chosen = null;
+          if (confirmedPaidToday) chosen = confirmedPaidToday;
+          else {
+            // look through all bookings (not only upcoming) to find ongoing trips
+            const ongoing = bookings.find(b => {
+              const st = (b.status || '').toString().toUpperCase();
+              if (st === 'COMPLETED' || st === 'CANCELLED') return false;
+              if (!b.startDate) return false;
+              // Require booking to be either explicitly CONFIRMED or have been paid
+              try {
+                const paymentInfo = checkPaymentStatus(b);
+                if (!paymentInfo.isPaid && st !== 'CONFIRMED') return false;
+              } catch (e) { return false; }
+              const sd = new Date(b.startDate);
+              const ed = b.endDate ? new Date(b.endDate) : sd;
+              const startDay = new Date(sd.getFullYear(), sd.getMonth(), sd.getDate());
+              const endDay = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate());
+              return todayDay >= startDay && todayDay <= endDay;
+            });
+            chosen = ongoing;
+          }
+
+          if (chosen) {
             const t = {
-              id: ongoing._id || ongoing.id,
-              destination: ongoing.packageId?.destination || ongoing.packageId?.title || ongoing.package?.destination || ongoing.package?.title || ongoing.packageTitle || 'Package',
-              startDate: ongoing.startDate,
-              endDate: ongoing.endDate,
-              dateLabel: ongoing.startDate ? `${new Date(ongoing.startDate).toLocaleDateString()}${ongoing.endDate ? ' - ' + new Date(ongoing.endDate).toLocaleDateString() : ''}` : 'TBD',
-              image: ongoing.packageId?.photos?.[0] || ongoing.package?.image || `https://source.unsplash.com/featured/?${encodeURIComponent((ongoing.packageId?.destination || ongoing.package?.destination || 'travel'))}`,
-              status: ongoing.status || 'PENDING',
+              id: chosen._id || chosen.id,
+              destination: chosen.packageId?.destination || chosen.packageId?.title || chosen.package?.destination || chosen.package?.title || chosen.packageTitle || 'Package',
+              startDate: chosen.startDate,
+              endDate: chosen.endDate,
+              dateLabel: chosen.startDate ? `${new Date(chosen.startDate).toLocaleDateString()}${chosen.endDate ? ' - ' + new Date(chosen.endDate).toLocaleDateString() : ''}` : 'TBD',
+              image: chosen.packageId?.photos?.[0] || chosen.package?.image || `https://source.unsplash.com/featured/?${encodeURIComponent((chosen.packageId?.destination || chosen.package?.destination || 'travel'))}`,
+              status: chosen.status || 'PENDING',
               booking: {
-                ...ongoing,
-                checkedIn: ongoing.checkedIn || (localStorage.getItem(`checkedIn_${ongoing._id || ongoing.id}`) === 'true')
+                ...chosen,
+                checkedIn: chosen.checkedIn || (localStorage.getItem(`checkedIn_${chosen._id || chosen.id}`) === 'true')
               }
             };
             setTodayTrip(t);
@@ -206,6 +250,34 @@ const CustomerDashboard = () => {
       setLoadingTrips(false);
     };
     load();
+    // listen for cross-component booking updates (e.g., marked completed elsewhere)
+    const onBookingUpdated = (e) => {
+      try {
+        const updated = e && e.detail ? e.detail : null;
+        if (!updated) return;
+        const idRaw = updated._id || updated.id;
+        if (!idRaw) return;
+        const idStr = (idRaw && typeof idRaw.toString === 'function') ? idRaw.toString() : idRaw;
+        // remove from upcomingTrips if present (compare as strings)
+        setUpcomingTrips(prev => prev.filter(t => {
+          const tid = t.id || t._id || (t.booking && (t.booking._id || t.booking.id));
+          const tidStr = (tid && typeof tid.toString === 'function') ? tid.toString() : tid;
+          return tidStr !== idStr;
+        }));
+        // update todayTrip if it matches
+        setTodayTrip(prev => {
+          if (!prev) return prev;
+          const prevId = prev.id || prev._id || (prev.booking && (prev.booking._id || prev.booking.id));
+          const prevIdStr = (prevId && typeof prevId.toString === 'function') ? prevId.toString() : prevId;
+          if (prevIdStr === idStr) return ({ ...prev, booking: { ...prev.booking, ...updated }, status: updated.status || 'COMPLETED', isOngoing: false });
+          return prev;
+        });
+      } catch (err) { /* ignore */ }
+    };
+    window.addEventListener('bookingUpdated', onBookingUpdated);
+    return () => {
+      window.removeEventListener('bookingUpdated', onBookingUpdated);
+    };
   }, [user]);
 
   // Fetch user reward points
@@ -274,12 +346,12 @@ const CustomerDashboard = () => {
           if (refreshed.ok) {
             const rdata = await refreshed.json();
             const bk = rdata.booking || rdata;
-            setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, ...bk }, isOngoing: t.isOngoing }) : t));
-            setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, ...bk } }) : prev);
+                setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, ...bk }, isOngoing: (bk.status === 'COMPLETED' ? false : t.isOngoing) }) : t));
+                setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, ...bk }, isOngoing: (bk.status === 'COMPLETED' ? false : (prev.isOngoing)) }) : prev);
           } else {
             // fallback optimistic update
-            setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, checkedIn: true }, isOngoing: t.isOngoing }) : t));
-            setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, checkedIn: true } }) : prev);
+                setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, checkedIn: true }, isOngoing: t.isOngoing }) : t));
+                setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, checkedIn: true }, isOngoing: prev.isOngoing }) : prev);
           }
         } catch (err) {
           setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, checkedIn: true }, isOngoing: t.isOngoing }) : t));
@@ -301,8 +373,8 @@ const CustomerDashboard = () => {
           if (refreshed.ok) {
             const rdata = await refreshed.json();
             const bk = rdata.booking || rdata;
-            setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, ...bk }, isOngoing: t.isOngoing }) : t));
-            setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, ...bk } }) : prev);
+            setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, ...bk }, isOngoing: (bk.status === 'COMPLETED' ? false : t.isOngoing) }) : t));
+            setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, ...bk }, isOngoing: (bk.status === 'COMPLETED' ? false : (prev.isOngoing)) }) : prev);
           } else {
             setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, checkedIn: true }, isOngoing: t.isOngoing }) : t));
             setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, checkedIn: true } }) : prev);
@@ -332,9 +404,11 @@ const CustomerDashboard = () => {
       }
       const data = await res.json();
       const updated = data.booking || data;
-      // update upcomingTrips and todayTrip
-      setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, ...updated }, status: updated.status || 'COMPLETED' }) : t));
-      setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, ...updated }, status: updated.status || 'COMPLETED' }) : prev);
+      // remove from upcomingTrips and update todayTrip
+      setUpcomingTrips(prev => prev.filter(t => t.id !== bookingId));
+      setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, ...updated }, status: updated.status || 'COMPLETED', isOngoing: false }) : prev);
+      // notify other components (e.g., Bookings) to refresh/move the booking
+      try { window.dispatchEvent(new CustomEvent('bookingUpdated', { detail: updated })); } catch (e) { /* ignore */ }
       alert('Tour marked as completed. You can now write a review.');
       // open review modal for the completed booking
       setReviewTargetBooking(updated);

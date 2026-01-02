@@ -284,7 +284,8 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
           travelers.push({
             fullName: i === 0 ? userFullName : `Guest ${i}`,
             age: 30, // Default age
-            phone: i === 0 ? userPhone : ''
+            phone: i === 0 ? userPhone : '',
+            userId: i === 0 ? userId : undefined
           });
         }
       } else {
@@ -900,7 +901,8 @@ const TourDetailModal = ({ isOpen, onClose, packageData, userRole = 'CUSTOMER' }
                                 newTravelers[0] = {
                                   fullName: userProfileData.fullName,
                                   age: userProfileData.age,
-                                  phone: userProfileData.phone
+                                  phone: userProfileData.phone,
+                                  userId: localStorage.getItem('userId') || null
                                 };
                                 setBookingData({...bookingData, travelers: newTravelers});
                               }

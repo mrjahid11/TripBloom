@@ -8,6 +8,21 @@ const ReviewModal = ({ isOpen, booking, onClose, onSubmitted }) => {
   const [error, setError] = useState('');
   const MIN_COMMENT_LENGTH = 10;
 
+  const isBookingCompleted = (b) => {
+    if (!b) return false;
+    const status = (b.status || (b.booking && b.booking.status) || '').toString().toUpperCase();
+    if (status === 'COMPLETED') return true;
+    if (b.isOngoing === false) return true;
+    const endDate = b.endDate || (b.booking && b.booking.endDate) || b.endedAt || (b.booking && b.booking.endedAt);
+    if (endDate) {
+      try {
+        const d = new Date(endDate);
+        if (!isNaN(d.getTime()) && d.getTime() <= Date.now()) return true;
+      } catch (e) { /* ignore parse errors */ }
+    }
+    return false;
+  };
+
   const submitReview = async ({ booking, rating, comment }) => {
     if (!booking) return;
     const pkgId = booking.packageId?._id || booking.packageId || (booking.package?._id || booking.package);
@@ -17,6 +32,14 @@ const ReviewModal = ({ isOpen, booking, onClose, onSubmitted }) => {
 
     if (!comment || comment.length < MIN_COMMENT_LENGTH) {
       setError(`Please write at least ${MIN_COMMENT_LENGTH} characters.`);
+      return;
+    }
+
+    // Ensure booking is completed before submitting
+    if (!isBookingCompleted(booking)) {
+      const msg = 'You can only review after the trip has ended';
+      setError(msg);
+      alert('Failed to submit review: ' + msg);
       return;
     }
 
@@ -79,10 +102,10 @@ const ReviewModal = ({ isOpen, booking, onClose, onSubmitted }) => {
                   <textarea name="comment" rows="4" minLength={MIN_COMMENT_LENGTH} className="w-full px-3 py-2 rounded-lg bg-white dark:bg-gray-700 border" required></textarea>
                   {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
           </div>
-          <div className="flex gap-3 justify-end">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700">Cancel</button>
-            <button type="submit" className="px-4 py-2 rounded-lg bg-primary text-white">Submit Review</button>
-          </div>
+            <div className="flex gap-3 justify-end">
+              <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700">Cancel</button>
+              <button type="submit" disabled={!isBookingCompleted(booking)} className="px-4 py-2 rounded-lg bg-primary text-white disabled:opacity-60 disabled:cursor-not-allowed">Submit Review</button>
+            </div>
         </form>
       </div>
     </div>

@@ -35,14 +35,12 @@ export async function createReview({ customerId, packageId, bookingId, rating, c
         return { error: 'Booking does not match the package being reviewed' };
       }
 
-      // Check if booking is completed
+      // Allow review if booking has been explicitly marked COMPLETED
+      // Otherwise require the booking endDate to be in the past
       if (booking.status !== 'COMPLETED') {
-        return { error: 'You can only review completed trips' };
-      }
-
-      // Check if trip has ended
-      if (new Date() < new Date(booking.endDate)) {
-        return { error: 'You can only review after the trip has ended' };
+        if (!booking.endDate || new Date() < new Date(booking.endDate)) {
+          return { error: 'You can only review after the trip has ended' };
+        }
       }
     }
 
