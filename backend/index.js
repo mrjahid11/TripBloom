@@ -18,6 +18,8 @@ mongoose.connect(mongoUri)
 import express from 'express';
 import cors from 'cors';
 import { ROLES, User } from './model/user.model.js';
+import cron from 'node-cron';
+import { autoCompletePassedBookings } from './service/booking.service.js';
 
 // Remove username index if it exists (for migration from old schema)
 User.collection.dropIndex('username_1').catch(() => {});
@@ -239,7 +241,8 @@ import {
   processRefundController,
   requestDateChangeController,
   approveDateChangeController,
-  rejectDateChangeController
+  rejectDateChangeController,
+  autoCompleteBookingsController
 } from './controller/booking.controller.js';
 app.post('/api/bookings', createBookingController); // Create booking
 app.get('/api/bookings/:bookingId', getBookingByIdController); // Get booking by ID
@@ -255,6 +258,8 @@ app.post('/api/admin/bookings/cancel-unpaid', cancelUnpaidBookingsController); /
 app.post('/api/admin/bookings/:bookingId/refund', processRefundController); // Process refund (Admin)
 app.post('/api/admin/bookings/:bookingId/approve-date-change', approveDateChangeController); // Approve date change (Admin)
 app.post('/api/admin/bookings/:bookingId/reject-date-change', rejectDateChangeController); // Reject date change (Admin)
+// Admin: trigger auto-complete job on demand
+app.post('/api/admin/bookings/auto-complete', requireRole(ROLES.ADMIN), autoCompleteBookingsController);
 
 // Review endpoints (customer)
 import {
@@ -410,6 +415,16 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 // Start server - MUST BE LAST
+// Schedule: run hourly at minute 0 to auto-complete passed bookings
+cron.schedule('0 * * * *', async () => {
+  console.log('[Scheduler] Running auto-complete job for bookings');
+  try {
+    const res = await autoCompletePassedBookings();
+    console.log(`[Scheduler] Auto-complete finished: ${res.completedCount || 0} bookings completed`);
+  } catch (err) {
+    console.error('[Scheduler] Error running auto-complete job:', err);
+  }
+});
 app.listen(PORT, () => {
   console.log(`🌸 TripBloom server running on port ${PORT}`);
 });

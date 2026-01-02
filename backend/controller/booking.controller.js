@@ -14,6 +14,7 @@ import {
   approveDateChange,
   rejectDateChange
 } from '../service/booking.service.js';
+import { autoCompletePassedBookings } from '../service/booking.service.js';
 import { checkInBooking } from '../service/booking.service.js';
 
 // Create a new booking
@@ -280,6 +281,20 @@ export async function cancelUnpaidBookingsController(req, res) {
       cancelledBookings: result.bookings
     });
   } catch (err) {
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+}
+
+// Admin: trigger auto-complete job on demand
+export async function autoCompleteBookingsController(req, res) {
+  try {
+    const result = await autoCompletePassedBookings();
+    if (result.error) {
+      return res.status(500).json({ success: false, message: result.error });
+    }
+    res.json({ success: true, message: `Auto-complete processed ${result.completedCount || 0} bookings.`, result });
+  } catch (err) {
+    console.error('Error in autoCompleteBookingsController:', err);
     res.status(500).json({ success: false, message: 'Server error', error: err.message });
   }
 }

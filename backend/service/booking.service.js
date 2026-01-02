@@ -35,6 +35,10 @@ export async function cancelUnpaidExpiredBookings() {
         cancelledAt: new Date(),
         refundAmount: totalPaid // Refund any partial payments
       };
+      // Ensure finalAmount exists to satisfy schema validation for older records
+      if (!booking.finalAmount) {
+        booking.finalAmount = booking.totalAmount || 0;
+      }
       await booking.save();
       cancelledBookings.push(booking);
       
@@ -658,6 +662,11 @@ export async function completeBooking(bookingId) {
       return { error: 'Booking not found' };
     }
 
+    // Idempotent: if already completed, return early
+    if (booking.status === 'COMPLETED') {
+      return { booking, message: 'Already completed' };
+    }
+
     if (booking.status === 'CANCELLED') {
       return { error: 'Cannot complete a cancelled booking' };
     }
@@ -691,6 +700,84 @@ export async function completeBooking(bookingId) {
   } catch (err) {
     console.error('Error completing booking:', err);
     return { error: 'Failed to complete booking' };
+  }
+}
+
+// Auto-complete bookings whose endDate has passed
+export async function autoCompletePassedBookings() {
+  try {
+    const now = new Date();
+
+    // Find candidate bookings (may return many; index on endDate+status recommended)
+    const candidates = await Booking.find({
+      endDate: { $lte: now },
+      status: { $in: ['CONFIRMED', 'CHECKED_IN'] },
+      'cancellation.isCancelled': false
+    }).select('_id');
+
+    const completed = [];
+
+    for (const c of candidates) {
+      try {
+        // Atomically claim the booking by setting status -> COMPLETED
+        const claimed = await Booking.findOneAndUpdate(
+          { _id: c._id, status: { $in: ['CONFIRMED', 'CHECKED_IN'] }, 'cancellation.isCancelled': false },
+          { $set: { status: 'COMPLETED' } },
+          { new: true }
+        );
+
+        if (!claimed) {
+          // someone else claimed or status changed
+          continue;
+        }
+
+        // Award points to customer (replicate part of completeBooking logic)
+        try {
+          const customer = await User.findById(claimed.customerId);
+          if (customer) {
+            // booking may not have package populated, get package
+            let pkg = claimed.packageId;
+            if (!pkg || !(pkg.category)) {
+              pkg = await TourPackage.findById(claimed.packageId);
+            }
+
+            const finalAmount = Number(claimed.finalAmount ?? claimed.totalAmount ?? 0) || 0;
+            const category = pkg?.category || null;
+            const pointsEarned = Number(Booking.calculatePointsForCategory(
+              category,
+              finalAmount
+            )) || 0;
+
+            // store pointsEarned safely
+            claimed.pointsEarned = pointsEarned;
+            // ensure finalAmount exists on booking for older records
+            if (!claimed.finalAmount) claimed.finalAmount = finalAmount;
+            await claimed.save();
+
+            customer.rewardPoints = (customer.rewardPoints || 0) + pointsEarned;
+            customer.pointsHistory.push({
+              amount: pointsEarned,
+              type: 'EARNED',
+              bookingId: claimed._id,
+              reason: `Earned from completing ${pkg?.category || 'tour'}`,
+              date: new Date()
+            });
+            await customer.save();
+          }
+        } catch (err) {
+          console.error(`Error awarding points for booking ${claimed._id}:`, err);
+        }
+
+        completed.push(claimed._id);
+      } catch (err) {
+        console.error(`Error processing candidate booking ${c._id}:`, err);
+      }
+    }
+
+    return { completedCount: completed.length, completed };
+  } catch (err) {
+    console.error('Error running autoCompletePassedBookings:', err);
+    return { error: err.message };
   }
 }
 

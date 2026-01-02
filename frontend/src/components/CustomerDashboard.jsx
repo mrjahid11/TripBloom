@@ -10,6 +10,7 @@ import OperatorChatModal from './OperatorChatModal';
 import NotificationCenter from './NotificationCenter';
 import AnnouncementBanner from './AnnouncementBanner';
 import AdminChat from './AdminChat';
+import ReviewModal from './ReviewModal';
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
@@ -31,6 +32,9 @@ const CustomerDashboard = () => {
   const [chatModalOpen, setChatModalOpen] = React.useState(false);
   const [chatBooking, setChatBooking] = React.useState(null);
   const [chatOperator, setChatOperator] = React.useState(null);
+  const [reviewModalOpen, setReviewModalOpen] = React.useState(false);
+  const [reviewTargetBooking, setReviewTargetBooking] = React.useState(null);
+  const [reviewedPackages, setReviewedPackages] = React.useState(new Set());
   const [showSupportChat, setShowSupportChat] = React.useState(false);
   const [stats, setStats] = React.useState({
     totalTrips: 0,
@@ -172,6 +176,28 @@ const CustomerDashboard = () => {
           totalTrips,
           countriesVisited: countries.size
         }));
+        // After loading bookings, check which packages the customer already reviewed
+        (async () => {
+          try {
+            const userId = (user && user.id) || localStorage.getItem('userId');
+            if (!userId) return;
+            const uniquePkgIds = Array.from(new Set(bookings.map(b => (b.packageId?._id || b.packageId || b.package?._id || b.package)))).filter(Boolean);
+            const reviewed = new Set();
+            await Promise.all(uniquePkgIds.map(async (pkgId) => {
+              try {
+                const res = await fetch(`/api/customers/${userId}/packages/${pkgId}/review`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data && data.success && data.review) reviewed.add(pkgId.toString());
+              } catch (err) {
+                // ignore
+              }
+            }));
+            setReviewedPackages(new Set(Array.from(reviewed)));
+          } catch (err) {
+            // ignore
+          }
+        })();
       } catch (err) {
         console.error('Dashboard bookings error', err);
         setTripsError('Failed to load trips');
@@ -292,6 +318,30 @@ const CustomerDashboard = () => {
     } catch (err) {
       console.error('Check-in error', err);
       alert('Check-in failed, please try again later.');
+    }
+  };
+
+  const handleEndTour = async (trip) => {
+    const bookingId = trip.id;
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/complete`, { method: 'POST' });
+      if (!res.ok) {
+        const txt = await res.text();
+        alert('Failed to end tour: ' + txt);
+        return;
+      }
+      const data = await res.json();
+      const updated = data.booking || data;
+      // update upcomingTrips and todayTrip
+      setUpcomingTrips(prev => prev.map(t => t.id === bookingId ? ({ ...t, booking: { ...t.booking, ...updated }, status: updated.status || 'COMPLETED' }) : t));
+      setTodayTrip(prev => (prev && prev.id === bookingId) ? ({ ...prev, booking: { ...prev.booking, ...updated }, status: updated.status || 'COMPLETED' }) : prev);
+      alert('Tour marked as completed. You can now write a review.');
+      // open review modal for the completed booking
+      setReviewTargetBooking(updated);
+      setReviewModalOpen(true);
+    } catch (err) {
+      console.error('End tour error', err);
+      alert('Failed to end tour, please try again later.');
     }
   };
 
@@ -493,6 +543,37 @@ const CustomerDashboard = () => {
                       >
                         <FaComments />
                       </button>
+                      {((trip.booking?.status === 'CONFIRMED' || trip.booking?.status === 'CHECKED_IN') && trip.isOngoing) && (
+                        <button
+                          onClick={() => handleEndTour(trip)}
+                          className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                        >
+                          End Tour
+                        </button>
+                      )}
+                      {trip.booking?.status === 'COMPLETED' && (() => {
+                        const pkgId = trip.booking.packageId?._id || trip.booking.packageId || (trip.booking.package?._id || trip.booking.package);
+                        const already = pkgId && reviewedPackages && reviewedPackages.has(pkgId.toString());
+                        if (already) {
+                          return (
+                            <button
+                              onClick={() => navigate('/customer/reviews')}
+                              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-100 transition-colors"
+                            >
+                              View Review
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <button
+                            onClick={() => { setReviewTargetBooking(trip.booking); setReviewModalOpen(true); }}
+                            className="px-4 py-2 rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
+                          >
+                            Write Review
+                          </button>
+                        );
+                      })()}
                       <button
                         onClick={() => {
                           // attempt to open a map view focused on package coordinates
@@ -604,6 +685,38 @@ const CustomerDashboard = () => {
             }}
             booking={chatBooking}
             operator={chatOperator}
+          />
+        )}
+
+        {reviewModalOpen && reviewTargetBooking && (
+          <ReviewModal
+            isOpen={reviewModalOpen}
+            booking={reviewTargetBooking}
+            onClose={() => { setReviewModalOpen(false); setReviewTargetBooking(null); }}
+            onSubmitted={(booking) => {
+              const pkgId = booking.packageId?._id || booking.packageId || (booking.package?._id || booking.package);
+              if (pkgId) setReviewedPackages(prev => {
+                const copy = new Set(Array.from(prev));
+                copy.add(pkgId.toString());
+                return copy;
+              });
+              // mark upcomingTrips and todayTrip locally as reviewed so UI updates
+              try {
+                setUpcomingTrips(prev => prev.map(t => {
+                  const bid = t.booking?._id || t.booking?.id;
+                  if (bid && (bid === (booking._id || booking.id))) {
+                    return { ...t, booking: { ...t.booking, _reviewed: true } };
+                  }
+                  return t;
+                }));
+                setTodayTrip(prev => {
+                  if (!prev) return prev;
+                  const bid = prev.booking?._id || prev.booking?.id;
+                  if (bid && (bid === (booking._id || booking.id))) return { ...prev, booking: { ...prev.booking, _reviewed: true } };
+                  return prev;
+                });
+              } catch (err) { /* ignore */ }
+            }}
           />
         )}
 

@@ -242,6 +242,7 @@ bookingSchema.index({ customerId: 1, status: 1 });
 bookingSchema.index({ packageId: 1, status: 1 });
 bookingSchema.index({ groupDepartureId: 1 });
 bookingSchema.index({ startDate: 1 });
+bookingSchema.index({ endDate: 1, status: 1 });
 bookingSchema.index({ createdAt: -1 });
 
 // Virtual for checking if booking is active

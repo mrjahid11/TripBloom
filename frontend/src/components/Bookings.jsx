@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import BookingDetailModal from './BookingDetailModal';
 import OperatorChatModal from './OperatorChatModal';
 import { useAuth } from '../context/AuthContext';
+import ReviewModal from './ReviewModal';
 
 const Bookings = () => {
   const [bookings, setBookings] = useState([]);
@@ -9,6 +10,9 @@ const Bookings = () => {
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [chatBooking, setChatBooking] = useState(null);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewTargetBooking, setReviewTargetBooking] = useState(null);
+  const [reviewedPackages, setReviewedPackages] = useState(new Set());
   const { user } = useAuth();
 
   useEffect(() => {
@@ -45,6 +49,26 @@ const Bookings = () => {
     };
     load();
   }, []);
+
+  // When bookings load/change, detect which packages are already reviewed
+  useEffect(() => {
+    const loadReviewed = async () => {
+      const userId = (user && user.id) || localStorage.getItem('userId');
+      if (!userId || bookings.length === 0) return;
+      const uniquePkgIds = Array.from(new Set(bookings.map(b => (b.packageId?._id || b.packageId || b.package?._id || b.package)))).filter(Boolean);
+      const reviewed = new Set();
+      await Promise.all(uniquePkgIds.map(async (pkgId) => {
+        try {
+          const res = await fetch(`/api/customers/${userId}/packages/${pkgId}/review`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && data.success && data.review) reviewed.add(pkgId.toString());
+        } catch (err) { /* ignore */ }
+      }));
+      setReviewedPackages(new Set(Array.from(reviewed)));
+    };
+    loadReviewed();
+  }, [bookings, user]);
 
   const checkPaymentStatus = (booking) => {
     const totalPaid = (booking.payments || []).filter(p => 
@@ -194,6 +218,43 @@ const Bookings = () => {
               💬 Chat
             </button>
           )}
+          {(paymentInfo.isPaid && (b.status === 'CONFIRMED' || b.status === 'CHECKED_IN')) && (
+            <button
+              onClick={async () => {
+                try {
+                  const res = await fetch(`/api/bookings/${b._id || b.id}/complete`, { method: 'POST' });
+                  if (!res.ok) {
+                    const txt = await res.text();
+                    alert('Failed to end tour: ' + txt);
+                    return;
+                  }
+                  const data = await res.json();
+                  const updated = data.booking || data;
+                  setBookings(prev => prev.map(x => (x._id === updated._id ? updated : x)));
+                  alert('Tour marked as completed. You can now write a review.');
+                } catch (err) {
+                  console.error('End tour error', err);
+                  alert('Failed to end tour, please try again later.');
+                }
+              }}
+              className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+            >
+              End Tour
+            </button>
+          )}
+          {b.status === 'COMPLETED' && (() => {
+            const pkgId = b.packageId?._id || b.packageId || (b.package?._id || b.package);
+            const bookingMarked = b._reviewed || b.review || (b.reviews && b.reviews.length > 0) || b.hasReview || b.reviewId;
+            const already = bookingMarked || (pkgId && reviewedPackages && reviewedPackages.has(pkgId.toString()));
+            if (already) {
+              return (
+                <button onClick={() => window.location.href = '/customer/reviews'} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-100 transition-colors">View Review</button>
+              );
+            }
+            return (
+              <button onClick={() => { setReviewTargetBooking(b); setReviewModalOpen(true); }} className="px-4 py-2 rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 transition-colors">Write Review</button>
+            );
+          })()}
         </div>
       </div>
     );
@@ -269,6 +330,23 @@ const Bookings = () => {
           onClose={() => setChatBooking(null)}
           booking={chatBooking}
           operator={chatBooking.assignedOperator}
+        />
+      )}
+      {reviewModalOpen && reviewTargetBooking && (
+        <ReviewModal
+          isOpen={reviewModalOpen}
+          booking={reviewTargetBooking}
+          onClose={() => { setReviewModalOpen(false); setReviewTargetBooking(null); }}
+          onSubmitted={(booking) => {
+            const pkgId = booking.packageId?._id || booking.packageId || (booking.package?._id || booking.package);
+            if (pkgId) setReviewedPackages(prev => {
+              const copy = new Set(Array.from(prev));
+              copy.add(pkgId.toString());
+              return copy;
+            });
+            // mark the booking locally so UI updates immediately
+            setBookings(prev => prev.map(x => (x._id === (booking._id || booking.id) ? ({ ...x, _reviewed: true }) : x)));
+          }}
         />
       )}
     </div>
